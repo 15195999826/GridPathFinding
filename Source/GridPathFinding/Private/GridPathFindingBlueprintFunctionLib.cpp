@@ -1,0 +1,172 @@
+﻿// Fill out your copyright notice in the Description page of Project Settings.
+
+
+#include "GridPathFindingBlueprintFunctionLib.h"
+
+#include "GridPathFinding.h"
+#include "GridPathFindingSettings.h"
+#include "JsonObjectConverter.h"
+#include "WaitGroupManager.h"
+
+TArray<FName> UGridPathFindingBlueprintFunctionLib::GetAllMapSaveNames()
+{
+	auto Settings = GetDefault<UGridPathFindingSettings>();
+	TArray<FName> MapNames;
+	TArray<FString> FileNames;
+	FString SavePath = FPaths::ProjectContentDir() / Settings->MapSaveFolder;
+	IFileManager::Get().FindFiles(FileNames, *SavePath, TEXT("*.txt"));
+
+	// 地图文件名格式为 MapName_Map.txt
+	for (const FString& FileName : FileNames)
+	{
+		FString MapName = FPaths::GetBaseFilename(FileName);
+		if (MapName.Contains(TEXT("_Map")))
+		{
+			MapName.RemoveFromEnd(TEXT("_Map"));
+			MapNames.Add(FName(*MapName));
+		}
+	}
+
+	return MapNames;
+}
+
+FGridMapSave UGridPathFindingBlueprintFunctionLib::LoadGridMapSave(FName InMapName)
+{
+	auto Settings = GetDefault<UGridPathFindingSettings>();
+	FString SavePath = FPaths::ProjectContentDir() / Settings->MapSaveFolder / (InMapName.ToString() + TEXT("_Map.txt"));
+	FString JsonString;
+	FFileHelper::LoadFileToString(JsonString, *SavePath);
+	FGridMapSave GridMapSave;
+	FJsonObjectConverter::JsonObjectStringToUStruct(JsonString, &GridMapSave, 0, 0);
+
+	UE_LOG(LogGridPathFinding, Log, TEXT("Load Map Save: %s, CreateTime: %s"), *GridMapSave.MapName.ToString(), *GridMapSave.CreateTime.ToString());
+	return GridMapSave;
+}
+
+#include "Misc/Base64.h"
+
+FString UGridPathFindingBlueprintFunctionLib::GGB_SerializeSaveData(FGGB_SaveData Data)
+{
+	TArray<uint8> BinaryData;
+	FMemoryWriter MemoryWriter(BinaryData, true);
+	MemoryWriter.SetIsSaving(true);
+	MemoryWriter << Data;
+
+	return FBase64::Encode(BinaryData);
+}
+
+FGGB_SaveData UGridPathFindingBlueprintFunctionLib::GGB_DeSerializeSaveData(FString Base64Str)
+{
+	FGGB_SaveData Data;
+
+	if (!Base64Str.IsEmpty() )
+	{
+		TArray<uint8> BinaryData;
+		BinaryData.SetNumUninitialized(Base64Str.Len());
+
+		if (FBase64::Decode(Base64Str, BinaryData))
+		{
+			FMemoryReader MemoryReader(BinaryData, true);
+			MemoryReader.SetIsLoading(true);
+			MemoryReader << Data;
+
+			UE_LOG(LogGridPathFinding, Log, TEXT("UGGBHelper::GGB_SerializeSaveData Base64Str.Len(%i) Data.HISM[%i] Data.Class(%s)"), Base64Str.Len(), Data.HISM.Num(), IsValid(Data.Class) ? *Data.Class->GetFName().ToString() : TEXT("nullptr"));
+
+		}
+		else
+		{
+			UE_LOG(LogGridPathFinding, Error, TEXT("UGGBHelper::GGB_SerializeSaveData FBase64::Decode FAILED!!!"));
+		}
+	}
+
+	return Data;
+}
+
+FString UGridPathFindingBlueprintFunctionLib::SerializeGridMapTiles(FGridMapTilesSave TilesSave)
+{
+	TArray<uint8> BinaryData;
+	FMemoryWriter MemoryWriter(BinaryData, true);
+	MemoryWriter.SetIsSaving(true);
+	MemoryWriter << TilesSave;
+
+	return FBase64::Encode(BinaryData);
+}
+
+FGridMapTilesSave UGridPathFindingBlueprintFunctionLib::DeserializeGridMapTiles(const FString& Base64Str)
+{
+	FGridMapTilesSave TilesSave;
+
+	if (!Base64Str.IsEmpty())
+	{
+		TArray<uint8> BinaryData;
+		if (FBase64::Decode(Base64Str, BinaryData))
+		{
+			FMemoryReader MemoryReader(BinaryData, true);
+			MemoryReader.SetIsLoading(true);
+			MemoryReader << TilesSave;
+
+			UE_LOG(LogGridPathFinding, Log, TEXT("UGridPathFindingBlueprintFunctionLib::DeserializeGridMapTiles: Successfully deserialized %d tiles (Version: %d)"), 
+				TilesSave.GridTiles.Num(), TilesSave.Version);
+		}
+		else
+		{
+			UE_LOG(LogGridPathFinding, Error, TEXT("UGridPathFindingBlueprintFunctionLib::DeserializeGridMapTiles: Base64 decode failed!"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogGridPathFinding, Warning, TEXT("UGridPathFindingBlueprintFunctionLib::DeserializeGridMapTiles: Empty Base64 string provided"));
+	}
+
+	return TilesSave;
+}
+
+bool UGridPathFindingBlueprintFunctionLib::SaveGridMapTilesToFile(const FGridMapTilesSave& TilesSave, const FString& FilePath)
+{
+	// 序列化为二进制数据
+	TArray<uint8> BinaryData;
+	FMemoryWriter MemoryWriter(BinaryData, true);
+	MemoryWriter.SetIsSaving(true);
+	
+	// 因为需要序列化const对象，创建一个非const副本
+	FGridMapTilesSave TilesSaveCopy = TilesSave;
+	MemoryWriter << TilesSaveCopy;
+
+	// 将二进制数据保存到文件
+	bool bSuccess = FFileHelper::SaveArrayToFile(BinaryData, *FilePath);
+	if (bSuccess)
+	{
+		UE_LOG(LogGridPathFinding, Log, TEXT("UGridPathFindingBlueprintFunctionLib::SaveGridMapTilesToFile: Successfully saved %d tiles to %s"),
+			TilesSave.GridTiles.Num(), *FilePath);
+	}
+	else
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("UGridPathFindingBlueprintFunctionLib::SaveGridMapTilesToFile: Failed to save to %s"), *FilePath);
+	}
+
+	return bSuccess;
+}
+
+bool UGridPathFindingBlueprintFunctionLib::LoadGridMapTilesFromFile(const FString& FilePath, FGridMapTilesSave& OutTilesSave)
+{
+	TArray<uint8> BinaryData;
+
+	// 从文件加载二进制数据
+	bool bSuccess = FFileHelper::LoadFileToArray(BinaryData, *FilePath);
+	if (bSuccess && BinaryData.Num() > 0)
+	{
+		// 反序列化二进制数据
+		FMemoryReader MemoryReader(BinaryData, true);
+		MemoryReader.SetIsLoading(true);
+		MemoryReader << OutTilesSave;
+
+		UE_LOG(LogGridPathFinding, Log, TEXT("UGridPathFindingBlueprintFunctionLib::LoadGridMapTilesFromFile: Successfully loaded %d tiles from %s"),
+			OutTilesSave.GridTiles.Num(), *FilePath);
+
+		return true;
+	}
+	
+	UE_LOG(LogGridPathFinding, Error, TEXT("UGridPathFindingBlueprintFunctionLib::LoadGridMapTilesFromFile: Failed to load from %s"), *FilePath);
+
+	return false;
+}
