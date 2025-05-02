@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Types/HCubeCoord.h"
+#include "Types/SerializableTile.h"
 #include "BuildGridMapTileConfigWidget.generated.h"
 
 class UEditableTextBox;
@@ -40,7 +41,8 @@ protected:
 	TObjectPtr<UTextBlock> TileColumnText;
 
 public:
-	void BindSingleCoord(FHCubeCoord SelectedCoord);
+	void BindSingleTileCoord(FHCubeCoord SelectedCoord);
+	void BindSingleTileData(const FSerializableTile& InTileData);
 
 private:
 	UPROPERTY()

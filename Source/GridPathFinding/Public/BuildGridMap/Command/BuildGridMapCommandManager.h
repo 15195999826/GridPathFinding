@@ -7,7 +7,9 @@
 #include "IGridMapCommand.h"
 #include "BuildGridMapCommandManager.generated.h"
 
-DECLARE_MULTICAST_DELEGATE_TwoParams(FBuildGridMapTwoNameDelegate,const FName& ,const FName&);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FBuildGridMapTwoNameDelegate, const FName&, const FName&);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FBuildGridMapTwoSizeXDelegate, int32, int32);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FBuildGridMapTwoSizeYDelegate, int32, int32);
 
 /**
  * 地图编辑命令管理器
@@ -18,7 +20,7 @@ UCLASS()
 class GRIDPATHFINDING_API UBuildGridMapCommandManager : public UObject
 {
 	GENERATED_BODY()
-	
+
 public:
 	UBuildGridMapCommandManager();
 
@@ -82,6 +84,12 @@ public:
 	 */
 	int32 GetMaxHistoryCount() const;
 
+	/**
+	 * 获取历史命令信息
+	 * @return 
+	 */
+	FString GetHistoryCommandInfo() const;
+
 private:
 	/** 已执行的命令历史 */
 	UPROPERTY()
@@ -97,8 +105,10 @@ private:
 	 * 确保历史记录数量不超过最大限制
 	 */
 	void EnforceHistoryLimit();
-	
+
 	// 事件系统， 所有Command需要抛出的事件都在这里声明
 public:
 	FBuildGridMapTwoNameDelegate OnChangeMapName;
+	FBuildGridMapTwoSizeXDelegate OnChangeMapSizeX;
+	FBuildGridMapTwoSizeYDelegate OnChangeMapSizeY;
 };

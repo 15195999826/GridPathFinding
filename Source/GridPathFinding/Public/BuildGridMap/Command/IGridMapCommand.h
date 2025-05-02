@@ -38,4 +38,10 @@ public:
 	 * @return 命令描述
 	 */
 	virtual FString GetDescription() const = 0;
+
+	// /**
+	//  * 获取命令名字
+	//  * @return 
+	//  */
+	// virtual FString GetName() const = 0;
 };

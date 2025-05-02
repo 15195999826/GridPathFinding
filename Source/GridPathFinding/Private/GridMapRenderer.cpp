@@ -19,7 +19,7 @@ AGridMapRenderer::AGridMapRenderer()
 
 	GridWireframe = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("GridWireframe"));
 	GridWireframe->SetupAttachment(SceneRoot);
-	
+
 	BackgroundWireframe = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("BackgroundWireframe"));
 	BackgroundWireframe->SetupAttachment(SceneRoot);
 }
@@ -44,7 +44,7 @@ void AGridMapRenderer::SetModel(UGridMapModel* InModel)
 		GridModel->OnTilesDataBuildCancel.RemoveAll(this);
 		GridModel->OnTileModify.RemoveAll(this);
 	}
-	
+
 	GridModel = InModel;
 	GridModel->OnTilesDataBuildCancel.AddUObject(this, &AGridMapRenderer::OnTilesDataBuildCancel);
 	GridModel->OnTileModify.AddUObject(this, &AGridMapRenderer::OnTileModify);
@@ -60,14 +60,14 @@ void AGridMapRenderer::RenderGridMap()
 
 	// if (RenderConfig.bDrawDefaultMap)
 	// {
-		// 移除DynamicEnvironmentComponents上全部已经渲染的内容
-		for (auto& ISMC : DynamicEnvironmentComponents)
+	// 移除DynamicEnvironmentComponents上全部已经渲染的内容
+	for (auto& ISMC : DynamicEnvironmentComponents)
+	{
+		if (ISMC)
 		{
-			if (ISMC)
-			{
-				ISMC->ClearInstances();
-			}
+			ISMC->ClearInstances();
 		}
+	}
 	// }
 
 	if (RenderConfig.bDrawBackgroundWireframe)
@@ -92,13 +92,13 @@ void AGridMapRenderer::ClearGridMap()
 
 	// if (RenderConfig.bDrawDefaultMap)
 	// {
-		for (auto& ISMC : DynamicEnvironmentComponents)
+	for (auto& ISMC : DynamicEnvironmentComponents)
+	{
+		if (ISMC)
 		{
-			if (ISMC)
-			{
-				ISMC->ClearInstances();
-			}
+			ISMC->ClearInstances();
 		}
+	}
 	// }
 }
 
@@ -109,7 +109,7 @@ void AGridMapRenderer::RenderTiles()
 	{
 		auto TilesPtr = GridModel->GetTilesArrayPtr();
 		auto TileEnvDataPtr = GridModel->GetTileEnvDataMapPtr();
-		
+
 		int32 RenderCount = 0;
 		for (const auto& Tile : *TilesPtr)
 		{
@@ -140,19 +140,17 @@ void AGridMapRenderer::HighLightBackground(const FHCubeCoord& InCoord, bool bHig
 	{
 		return;
 	}
-	
+
 	if (bHighLight)
 	{
 		SetWireFrameColor(BackgroundWireframe, InstanceIndex, RenderConfig.BackgroundWireframeHighlightColor,
-		                  RenderConfig.BackgroundDrawLocationOffset.Z, 0.2f);	
-			
+		                  RenderConfig.BackgroundDrawLocationOffset.Z, 0.2f);
 	}
 	else
 	{
 		SetWireFrameColor(BackgroundWireframe, InstanceIndex, RenderConfig.BackgroundWireframeColor,
-						  RenderConfig.BackgroundDrawLocationOffset.Z, 0.f);	
+		                  RenderConfig.BackgroundDrawLocationOffset.Z, 0.f);
 	}
-
 }
 
 void AGridMapRenderer::OnTilesDataBuildCancel()
@@ -169,21 +167,22 @@ void AGridMapRenderer::OnTilesDataBuildComplete()
 	{
 		GridModel->OnTilesDataBuildComplete.Remove(TilesDataBuildOverHandle);
 	}
-	
+
 	RenderTiles();
 }
 
 void AGridMapRenderer::DrawBackgroundWireframe()
 {
 	BackgroundWireframe->ClearInstances();
-	
-	auto Config = GridModel->GetMapConfig();
+
+	auto Config = GridModel->GetMapConfigPtr();
 
 	SetBackgroundWireframeMesh(Config->MapType);
 
 	auto GridRotator = GetGridRotator();
 	GridModel->StableForEachMapGrid([this, GridRotator](const FHCubeCoord& Coord, int32 Row, int32 Column)
 	{
+		// UE_LOG(LogTemp, Log, TEXT("[DrawBackgroundWireframe] Row: %d, Col: %d"), Row, Column);
 		auto TileLocation = GridModel->StableCoordToWorld(Coord);
 		FTransform WireFrameTransform = FTransform(
 			GridRotator, TileLocation + RenderConfig.BackgroundDrawLocationOffset,
@@ -201,7 +200,7 @@ void AGridMapRenderer::DrawBackgroundWireframe()
 
 FRotator AGridMapRenderer::GetGridRotator() const
 {
-	auto Config = GridModel->GetMapConfig();
+	auto Config = GridModel->GetMapConfigPtr();
 	if (Config->MapType == EGridMapType::HEX_STANDARD)
 	{
 		if (Config->TileOrientation == ETileOrientationFlag::FLAT)
@@ -211,7 +210,7 @@ FRotator AGridMapRenderer::GetGridRotator() const
 
 		if (Config->TileOrientation == ETileOrientationFlag::POINTY)
 		{
-			return  HexPointyRotator;
+			return HexPointyRotator;
 		}
 	}
 	else if (Config->MapType == EGridMapType::RECTANGLE_SIX_DIRECTION)
@@ -226,14 +225,14 @@ FRotator AGridMapRenderer::GetGridRotator() const
 			return RectPointyRotator;
 		}
 	}
-	
+
 	return FRotator::ZeroRotator;
 }
 
 void AGridMapRenderer::SetWireFrameColor(TObjectPtr<UInstancedStaticMeshComponent> InWireFrame, int Index,
-	const FLinearColor& InColor, float DefaultHeight, float NewHeight)
+                                         const FLinearColor& InColor, float DefaultHeight, float NewHeight)
 {
-	TArray<float> CustomData {InColor.R, InColor.G, InColor.B, InColor.A};
+	TArray<float> CustomData{InColor.R, InColor.G, InColor.B, InColor.A};
 	InWireFrame->SetCustomData(Index, CustomData);
 
 	// Todo: 暂不考虑高度缩放的的问题
@@ -242,17 +241,17 @@ void AGridMapRenderer::SetWireFrameColor(TObjectPtr<UInstancedStaticMeshComponen
 	// ScaleZ = ScaleZ<=0.1f? 1.0f : ScaleZ;
 
 	float ScaleZ = 1.f;
-	
-	FTransform Transform ;
+
+	FTransform Transform;
 	InWireFrame->GetInstanceTransform(Index, Transform, true);
 	auto NewLocation = Transform.GetLocation();
 	NewLocation.Z = ScaleZ * DefaultHeight + NewHeight;
 	Transform.SetLocation(NewLocation);
-	InWireFrame->UpdateInstanceTransform(Index,Transform, true);
+	InWireFrame->UpdateInstanceTransform(Index, Transform, true);
 }
 
 void AGridMapRenderer::OnTileModify(EGridMapModelTileModifyType GridMapModelTileModify, const FHCubeCoord& InCoord,
-	const FTileInfo& OldTileInfo, const FTileInfo& NewTileInfo)
+                                    const FTileInfo& OldTileInfo, const FTileInfo& NewTileInfo)
 {
 	// 处理Tile修改事件
 }
@@ -317,7 +316,7 @@ void AGridMapRenderer::InitializeEnvironmentComponents()
 		NewComponent->SetNumCustomDataFloats(2); // 第一个用于区分使用哪个Category， 第二用于指向Texture2dArray的index；
 #if WITH_EDITOR
 		NewComponent->CreationMethod = EComponentCreationMethod::Native; // 关键设置
-		NewComponent->SetFlags(RF_Transactional);  // 使组件可在编辑器中序列化
+		NewComponent->SetFlags(RF_Transactional); // 使组件可在编辑器中序列化
 #endif
 		NewComponent->RegisterComponent();
 
@@ -327,10 +326,10 @@ void AGridMapRenderer::InitializeEnvironmentComponents()
 		// 存储组件引用
 		Mesh2ISMCIndexMap.Add(Mesh, DynamicEnvironmentComponents.Num() - 1);
 
-		UE_LOG(LogGridPathFinding, Log, TEXT("为Mesh创建了ISM组件，共有%d个环境类型使用此Mesh"), 
-			Settings->EnvironmentTypes.FilterByPredicate([Mesh](const TSoftObjectPtr<UGridEnvironmentType>& TypePtr) {
-				return TypePtr.LoadSynchronous() && TypePtr.LoadSynchronous()->BuildGridMapMesh.LoadSynchronous() == Mesh;
-			}).Num());
+		UE_LOG(LogGridPathFinding, Log, TEXT("为Mesh创建了ISM组件，共有%d个环境类型使用此Mesh"),
+		       Settings->EnvironmentTypes.FilterByPredicate([Mesh](const TSoftObjectPtr<UGridEnvironmentType>& TypePtr) {
+			       return TypePtr.LoadSynchronous() && TypePtr.LoadSynchronous()->BuildGridMapMesh.LoadSynchronous() == Mesh;
+			       }).Num());
 	}
 }
 
@@ -365,8 +364,23 @@ void AGridMapRenderer::UpdateTile(FHCubeCoord Coord, const FName& OldEnvType, co
 		if (OldEnvType != NewEnvType)
 		{
 			// 移除地块
+			// OldEnvTypeISM->RemoveInstance(EnvISMCIndexMap[Coord]);
+			// EnvISMCIndexMap.Remove(Coord);
+
+			auto Idx = EnvISMCIndexMap.Find(Coord);
+			check(Idx != nullptr);
+
+			int32 RemoveIdx = *Idx;
 			OldEnvTypeISM->RemoveInstance(EnvISMCIndexMap[Coord]);
 			EnvISMCIndexMap.Remove(Coord);
+
+			for (auto& Pair : EnvISMCIndexMap)
+			{
+				if (Pair.Value > RemoveIdx)
+				{
+					Pair.Value--;
+				}
+			}
 		}
 		else
 		{
@@ -375,9 +389,9 @@ void AGridMapRenderer::UpdateTile(FHCubeCoord Coord, const FName& OldEnvType, co
 			check(EnvType2DefaultCustomDataMap.Contains(OldEnvType))
 			const auto& DefaultCustomData = EnvType2DefaultCustomDataMap[OldEnvType];
 			OldEnvTypeISM->SetCustomData(Index, {
-											 DefaultCustomData.TextureArrayCategory, static_cast<float>(InTileEnvData.TextureIndex),
-											 DefaultCustomData.Roughness
-										 });
+				                             DefaultCustomData.TextureArrayCategory, static_cast<float>(InTileEnvData.TextureIndex),
+				                             DefaultCustomData.Roughness
+			                             });
 			return;
 		}
 	}
@@ -387,7 +401,7 @@ void AGridMapRenderer::UpdateTile(FHCubeCoord Coord, const FName& OldEnvType, co
 		// 新环境类型为空， 则只移除旧的实例
 		return;
 	}
-	
+
 	// 创建新实例
 	UInstancedStaticMeshComponent* NewEnvISM = GetEnvironmentComponent(NewEnvType);
 	check(NewEnvISM);
@@ -403,9 +417,9 @@ void AGridMapRenderer::UpdateTile(FHCubeCoord Coord, const FName& OldEnvType, co
 	check(EnvType2DefaultCustomDataMap.Contains(NewEnvType))
 	const auto& DefaultCustomData = EnvType2DefaultCustomDataMap[NewEnvType];
 	NewEnvISM->SetCustomData(Index, {
-								 DefaultCustomData.TextureArrayCategory, static_cast<float>(InTileEnvData.TextureIndex),
-								 DefaultCustomData.Roughness
-							 });
+		                         DefaultCustomData.TextureArrayCategory, static_cast<float>(InTileEnvData.TextureIndex),
+		                         DefaultCustomData.Roughness
+	                         });
 }
 
 
@@ -418,155 +432,154 @@ void AGridMapRenderer::DebugDrawChunks()
 	const float DebugDrawDuration = 10.0f; // 调试线条显示时间
 	const float LineThickness = 2.0f; // 线条粗细
 
-	auto MapConfig = GridModel->GetMapConfig();
+	auto MapConfig = GridModel->GetMapConfigPtr();
 	switch (MapConfig->DrawMode)
 	{
-		case EGridMapDrawMode::BaseOnRowColumn:
-			{
-				// 计算地图边界
-				const auto RowStart = -FMath::FloorToInt(MapConfig->MapSize.X / 2.f);
-				const auto RowEnd = FMath::CeilToInt(MapConfig->MapSize.X / 2.f);
-				const auto ColumnStart = -FMath::FloorToInt(MapConfig->MapSize.Y / 2.f);
-				const auto ColumnEnd = FMath::CeilToInt(MapConfig->MapSize.Y / 2.f);
+	case EGridMapDrawMode::BaseOnRowColumn:
+		{
+			// 计算地图边界
+			const auto RowStart = -FMath::FloorToInt(MapConfig->MapSize.X / 2.f);
+			const auto RowEnd = FMath::CeilToInt(MapConfig->MapSize.X / 2.f);
+			const auto ColumnStart = -FMath::FloorToInt(MapConfig->MapSize.Y / 2.f);
+			const auto ColumnEnd = FMath::CeilToInt(MapConfig->MapSize.Y / 2.f);
 
-				// 计算区块数量
-				const int32 NumChunksX = FMath::CeilToInt((float)(RowEnd - RowStart) / ChunkSize);
-				const int32 NumChunksY = FMath::CeilToInt((float)(ColumnEnd - ColumnStart) / ChunkSize);
+			// 计算区块数量
+			const int32 NumChunksX = FMath::CeilToInt((float)(RowEnd - RowStart) / ChunkSize);
+			const int32 NumChunksY = FMath::CeilToInt((float)(ColumnEnd - ColumnStart) / ChunkSize);
 
-				auto DesiredChunkCount = GridModel->StableGetChunkCount();
-				GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red,
-					TEXT("DesiredChunkCount: ") + FString::Printf(TEXT("%d, %s"), DesiredChunkCount, DesiredChunkCount == NumChunksX * NumChunksY ? TEXT("OK") : TEXT("Error")));
-				// 定义一组颜色用于不同的Chunk
-				TArray<FLinearColor> ChunkColors;
-				ChunkColors.Add(FLinearColor(1.0f, 0.0f, 0.0f, 1.0f)); // 红色
-				ChunkColors.Add(FLinearColor(0.0f, 1.0f, 0.0f, 1.0f)); // 绿色
-				ChunkColors.Add(FLinearColor(0.0f, 0.0f, 1.0f, 1.0f)); // 蓝色
-				ChunkColors.Add(FLinearColor(1.0f, 1.0f, 0.0f, 1.0f)); // 黄色
-				ChunkColors.Add(FLinearColor(1.0f, 0.0f, 1.0f, 1.0f)); // 紫色
-				ChunkColors.Add(FLinearColor(0.0f, 1.0f, 1.0f, 1.0f)); // 青色
-				ChunkColors.Add(FLinearColor(1.0f, 0.5f, 0.0f, 1.0f)); // 橙色
-				ChunkColors.Add(FLinearColor(0.5f, 0.0f, 1.0f, 1.0f)); // 紫蓝色
+			auto DesiredChunkCount = GridModel->StableGetChunkCount();
+			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red,
+			                                 TEXT("DesiredChunkCount: ") + FString::Printf(TEXT("%d, %s"), DesiredChunkCount, DesiredChunkCount == NumChunksX * NumChunksY ? TEXT("OK") : TEXT("Error")));
+			// 定义一组颜色用于不同的Chunk
+			TArray<FLinearColor> ChunkColors;
+			ChunkColors.Add(FLinearColor(1.0f, 0.0f, 0.0f, 1.0f)); // 红色
+			ChunkColors.Add(FLinearColor(0.0f, 1.0f, 0.0f, 1.0f)); // 绿色
+			ChunkColors.Add(FLinearColor(0.0f, 0.0f, 1.0f, 1.0f)); // 蓝色
+			ChunkColors.Add(FLinearColor(1.0f, 1.0f, 0.0f, 1.0f)); // 黄色
+			ChunkColors.Add(FLinearColor(1.0f, 0.0f, 1.0f, 1.0f)); // 紫色
+			ChunkColors.Add(FLinearColor(0.0f, 1.0f, 1.0f, 1.0f)); // 青色
+			ChunkColors.Add(FLinearColor(1.0f, 0.5f, 0.0f, 1.0f)); // 橙色
+			ChunkColors.Add(FLinearColor(0.5f, 0.0f, 1.0f, 1.0f)); // 紫蓝色
 
-				// 为每个格子设置颜色
-				GridModel->StableForEachMapGrid(
-					[this, &ChunkColors, NumChunksY, ChunkSize, RowStart, ColumnStart](
-					const FHCubeCoord& Coord, int32 Row, int32 Column)
-					{
-						
-						// 计算区块索引
-						int32 ChunkIndex = GridModel->StableGetCoordChunkIndex(Coord);
-						// 获取格子的实例索引
-						int32 InstanceIndex = GridModel->StableGetFullMapGridIterIndex(Coord);
-						if (InstanceIndex != INDEX_NONE)
-						{
-							// 选择颜色 (循环使用颜色数组)
-							int32 ColorIndex = ChunkIndex % ChunkColors.Num();
-							FLinearColor ChunkColor = ChunkColors[ColorIndex];
-
-							// 设置格子颜色
-							SetWireFrameColor(BackgroundWireframe, InstanceIndex, ChunkColor,
-							                  RenderConfig.BackgroundDrawLocationOffset.Z, 0.0f);
-						}
-					});
-
-
-				// 遍历每个区块
-				for (int32 ChunkRow = 0; ChunkRow < NumChunksX; ++ChunkRow)
+			// 为每个格子设置颜色
+			GridModel->StableForEachMapGrid(
+				[this, &ChunkColors, NumChunksY, ChunkSize, RowStart, ColumnStart](
+				const FHCubeCoord& Coord, int32 Row, int32 Column)
 				{
-					for (int32 ChunkCol = 0; ChunkCol < NumChunksY; ++ChunkCol)
+					// 计算区块索引
+					int32 ChunkIndex = GridModel->StableGetCoordChunkIndex(Coord);
+					// 获取格子的实例索引
+					int32 InstanceIndex = GridModel->StableGetFullMapGridIterIndex(Coord);
+					if (InstanceIndex != INDEX_NONE)
 					{
-						// 计算区块在地图上的边界坐标
-						int32 StartRow = RowStart + ChunkRow * ChunkSize;
-						int32 StartCol = ColumnStart + ChunkCol * ChunkSize;
-						int32 EndRow = FMath::Min(StartRow + ChunkSize, RowEnd);
-						int32 EndCol = FMath::Min(StartCol + ChunkSize, ColumnEnd);
-						int32 CenterRow = StartRow + (EndRow - StartRow) / 2;
-						int32 CenterCol = StartCol + (EndCol - StartCol) / 2;
+						// 选择颜色 (循环使用颜色数组)
+						int32 ColorIndex = ChunkIndex % ChunkColors.Num();
+						FLinearColor ChunkColor = ChunkColors[ColorIndex];
 
-						// 将行列坐标转换为世界坐标
-						FHCubeCoord TopLeftCoord, TopRightCoord, BottomLeftCoord, BottomRightCoord;
-						FHCubeCoord CenterCoord;
-						if (MapConfig->TileOrientation == ETileOrientationFlag::FLAT)
-						{
-							// 计算四个角的Cube坐标
-							auto Q1 = StartCol;
-							auto R1 = StartRow - (StartCol - (StartCol & 1)) / 2;
-							TopLeftCoord = FHCubeCoord(FIntVector(Q1, R1, -Q1 - R1));
-
-							auto Q2 = EndCol - 1;
-							auto R2 = StartRow - (Q2 - (Q2 & 1)) / 2;
-							TopRightCoord = FHCubeCoord(FIntVector(Q2, R2, -Q2 - R2));
-
-							auto Q3 = StartCol;
-							auto R3 = EndRow - 1 - (Q3 - (Q3 & 1)) / 2;
-							BottomLeftCoord = FHCubeCoord(FIntVector(Q3, R3, -Q3 - R3));
-
-							auto Q4 = EndCol - 1;
-							auto R4 = EndRow - 1 - (Q4 - (Q4 & 1)) / 2;
-							BottomRightCoord = FHCubeCoord(FIntVector(Q4, R4, -Q4 - R4));
-
-							auto Q = CenterCol;
-							auto R = CenterRow - (CenterCol - (CenterCol & 1)) / 2;
-							CenterCoord = FHCubeCoord(FIntVector(Q, R, -Q - R));
-						}
-						else // POINTY
-						{
-							// 计算四个角的Cube坐标
-							auto Q1 = StartCol - (StartRow - (StartRow & 1)) / 2;
-							auto R1 = StartRow;
-							TopLeftCoord = FHCubeCoord(FIntVector(Q1, R1, -Q1 - R1));
-
-							auto Q2 = EndCol - 1 - (StartRow - (StartRow & 1)) / 2;
-							auto R2 = StartRow;
-							TopRightCoord = FHCubeCoord(FIntVector(Q2, R2, -Q2 - R2));
-
-							auto Q3 = StartCol - (EndRow - 1 - (EndRow - 1 & 1)) / 2;
-							auto R3 = EndRow - 1;
-							BottomLeftCoord = FHCubeCoord(FIntVector(Q3, R3, -Q3 - R3));
-
-							auto Q4 = EndCol - 1 - (EndRow - 1 - (EndRow - 1 & 1)) / 2;
-							auto R4 = EndRow - 1;
-							BottomRightCoord = FHCubeCoord(FIntVector(Q4, R4, -Q4 - R4));
-							auto Q = CenterCol - (CenterRow - (CenterRow & 1)) / 2;
-							auto R = CenterRow;
-							CenterCoord = FHCubeCoord(FIntVector(Q, R, -Q - R));
-						}
-
-						// 转换为世界坐标
-						FVector TopLeft = GridModel->StableCoordToWorld(TopLeftCoord);
-						FVector TopRight = GridModel->StableCoordToWorld(TopRightCoord);
-						FVector BottomLeft = GridModel->StableCoordToWorld(BottomLeftCoord);
-						FVector BottomRight = GridModel->StableCoordToWorld(BottomRightCoord);
-
-						// 绘制区块边界
-						FColor ChunkColor = FColor::Green;
-						DrawDebugLine(World, TopLeft, TopRight, ChunkColor, false, DebugDrawDuration, 0, LineThickness);
-						DrawDebugLine(World, TopRight, BottomRight, ChunkColor, false, DebugDrawDuration, 0,
-						              LineThickness);
-						DrawDebugLine(World, BottomRight, BottomLeft, ChunkColor, false, DebugDrawDuration, 0,
-						              LineThickness);
-						DrawDebugLine(World, BottomLeft, TopLeft, ChunkColor, false, DebugDrawDuration, 0,
-						              LineThickness);
-
-						// 计算区块中心位置
-						FVector ChunkCenter = GridModel->StableCoordToWorld(CenterCoord);
-
-						// 计算区块索引
-						int32 ChunkIndex = ChunkRow * NumChunksY + ChunkCol;
-
-						// 在区块中心绘制球体和索引文本
-						DrawDebugSphere(World, ChunkCenter, 10.0f, 8, FColor::Red, false, DebugDrawDuration);
-						DrawDebugString(World, ChunkCenter, FString::Printf(TEXT("Chunk %d"), ChunkIndex),
-						                nullptr, FColor::White, DebugDrawDuration);
+						// 设置格子颜色
+						SetWireFrameColor(BackgroundWireframe, InstanceIndex, ChunkColor,
+						                  RenderConfig.BackgroundDrawLocationOffset.Z, 0.0f);
 					}
+				});
+
+
+			// 遍历每个区块
+			for (int32 ChunkRow = 0; ChunkRow < NumChunksX; ++ChunkRow)
+			{
+				for (int32 ChunkCol = 0; ChunkCol < NumChunksY; ++ChunkCol)
+				{
+					// 计算区块在地图上的边界坐标
+					int32 StartRow = RowStart + ChunkRow * ChunkSize;
+					int32 StartCol = ColumnStart + ChunkCol * ChunkSize;
+					int32 EndRow = FMath::Min(StartRow + ChunkSize, RowEnd);
+					int32 EndCol = FMath::Min(StartCol + ChunkSize, ColumnEnd);
+					int32 CenterRow = StartRow + (EndRow - StartRow) / 2;
+					int32 CenterCol = StartCol + (EndCol - StartCol) / 2;
+
+					// 将行列坐标转换为世界坐标
+					FHCubeCoord TopLeftCoord, TopRightCoord, BottomLeftCoord, BottomRightCoord;
+					FHCubeCoord CenterCoord;
+					if (MapConfig->TileOrientation == ETileOrientationFlag::FLAT)
+					{
+						// 计算四个角的Cube坐标
+						auto Q1 = StartCol;
+						auto R1 = StartRow - (StartCol - (StartCol & 1)) / 2;
+						TopLeftCoord = FHCubeCoord(FIntVector(Q1, R1, -Q1 - R1));
+
+						auto Q2 = EndCol - 1;
+						auto R2 = StartRow - (Q2 - (Q2 & 1)) / 2;
+						TopRightCoord = FHCubeCoord(FIntVector(Q2, R2, -Q2 - R2));
+
+						auto Q3 = StartCol;
+						auto R3 = EndRow - 1 - (Q3 - (Q3 & 1)) / 2;
+						BottomLeftCoord = FHCubeCoord(FIntVector(Q3, R3, -Q3 - R3));
+
+						auto Q4 = EndCol - 1;
+						auto R4 = EndRow - 1 - (Q4 - (Q4 & 1)) / 2;
+						BottomRightCoord = FHCubeCoord(FIntVector(Q4, R4, -Q4 - R4));
+
+						auto Q = CenterCol;
+						auto R = CenterRow - (CenterCol - (CenterCol & 1)) / 2;
+						CenterCoord = FHCubeCoord(FIntVector(Q, R, -Q - R));
+					}
+					else // POINTY
+					{
+						// 计算四个角的Cube坐标
+						auto Q1 = StartCol - (StartRow - (StartRow & 1)) / 2;
+						auto R1 = StartRow;
+						TopLeftCoord = FHCubeCoord(FIntVector(Q1, R1, -Q1 - R1));
+
+						auto Q2 = EndCol - 1 - (StartRow - (StartRow & 1)) / 2;
+						auto R2 = StartRow;
+						TopRightCoord = FHCubeCoord(FIntVector(Q2, R2, -Q2 - R2));
+
+						auto Q3 = StartCol - (EndRow - 1 - (EndRow - 1 & 1)) / 2;
+						auto R3 = EndRow - 1;
+						BottomLeftCoord = FHCubeCoord(FIntVector(Q3, R3, -Q3 - R3));
+
+						auto Q4 = EndCol - 1 - (EndRow - 1 - (EndRow - 1 & 1)) / 2;
+						auto R4 = EndRow - 1;
+						BottomRightCoord = FHCubeCoord(FIntVector(Q4, R4, -Q4 - R4));
+						auto Q = CenterCol - (CenterRow - (CenterRow & 1)) / 2;
+						auto R = CenterRow;
+						CenterCoord = FHCubeCoord(FIntVector(Q, R, -Q - R));
+					}
+
+					// 转换为世界坐标
+					FVector TopLeft = GridModel->StableCoordToWorld(TopLeftCoord);
+					FVector TopRight = GridModel->StableCoordToWorld(TopRightCoord);
+					FVector BottomLeft = GridModel->StableCoordToWorld(BottomLeftCoord);
+					FVector BottomRight = GridModel->StableCoordToWorld(BottomRightCoord);
+
+					// 绘制区块边界
+					FColor ChunkColor = FColor::Green;
+					DrawDebugLine(World, TopLeft, TopRight, ChunkColor, false, DebugDrawDuration, 0, LineThickness);
+					DrawDebugLine(World, TopRight, BottomRight, ChunkColor, false, DebugDrawDuration, 0,
+					              LineThickness);
+					DrawDebugLine(World, BottomRight, BottomLeft, ChunkColor, false, DebugDrawDuration, 0,
+					              LineThickness);
+					DrawDebugLine(World, BottomLeft, TopLeft, ChunkColor, false, DebugDrawDuration, 0,
+					              LineThickness);
+
+					// 计算区块中心位置
+					FVector ChunkCenter = GridModel->StableCoordToWorld(CenterCoord);
+
+					// 计算区块索引
+					int32 ChunkIndex = ChunkRow * NumChunksY + ChunkCol;
+
+					// 在区块中心绘制球体和索引文本
+					DrawDebugSphere(World, ChunkCenter, 10.0f, 8, FColor::Red, false, DebugDrawDuration);
+					DrawDebugString(World, ChunkCenter, FString::Printf(TEXT("Chunk %d"), ChunkIndex),
+					                nullptr, FColor::White, DebugDrawDuration);
 				}
 			}
-			break;
+		}
+		break;
 
-		case EGridMapDrawMode::BaseOnRadius:
-		case EGridMapDrawMode::BaseOnVolume:
-			UE_LOG(LogGridPathFinding, Warning, TEXT("暂不支持在 %s 模式下绘制区块"),
-			       *UEnum::GetValueAsString(MapConfig->DrawMode));
-			break;
+	case EGridMapDrawMode::BaseOnRadius:
+	case EGridMapDrawMode::BaseOnVolume:
+		UE_LOG(LogGridPathFinding, Warning, TEXT("暂不支持在 %s 模式下绘制区块"),
+		       *UEnum::GetValueAsString(MapConfig->DrawMode));
+		break;
 	}
 }

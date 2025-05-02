@@ -36,7 +36,8 @@ public class GridPathFinding : ModuleRules
 				"LomoLib",
 				"UMG",
 				"Json",
-				"JsonUtilities"
+				"JsonUtilities",
+				"InputCore",
 				// ... add other public dependencies that you statically link with here ...
 			}
 		);

@@ -54,13 +54,13 @@ protected:
 	// 环境数据，目前只存放了运行时的渲染数据
 	UPROPERTY()
 	TMap<FHCubeCoord, FTileEnvData> TileEnvDataMap;
-	
+
 	UPROPERTY()
 	FGridMapConfig MapConfig;
 
 	UPROPERTY()
 	bool IsBuilding{false};
-	
+
 public:
 	FSimpleMulticastDelegate OnTilesDataBuildCancel;
 	/** 地图数据构建完成事件 */
@@ -68,7 +68,7 @@ public:
 
 	// Build时不会抛出事件， 仅Build完成后再修改才会Broadcast
 	FGridMapMoldelTileModifyDelegate OnTileModify;
-	
+
 	/** 
 	 * 构建地图数据
 	 * 考虑到 InTilesData 的数据量可能会比较大，采用异步任务填充 Tiles 数组
@@ -83,7 +83,7 @@ public:
 		return IsBuilding;
 	}
 
-	const FGridMapConfig* GetMapConfig() const
+	const FGridMapConfig* GetMapConfigPtr() const
 	{
 		return &MapConfig;
 	}
@@ -116,25 +116,25 @@ protected:
 		FBuildTilesDataTask(UGridMapModel* InOwner, const TMap<FHCubeCoord, FSerializableTile>& InTilesData,
 		                    TSharedPtr<TArray<FTileInfo>> OutTiles, TSharedPtr<TMap<FHCubeCoord, int32>> OutIndexMap,
 		                    TSharedPtr<TMap<FHCubeCoord, FTileEnvData>> OutEnvData);
-		
+
 		void DoWork();
-		
+
 		/** 设置任务的友元类，以便在任务完成时通知 */
 		FORCEINLINE TStatId GetStatId() const
 		{
 			RETURN_QUICK_DECLARE_CYCLE_STAT(FBuildTilesDataTask, STATGROUP_ThreadPoolAsyncTasks);
 		}
-		
+
 		/** 任务完成回调 */
 		TFunction<void()> OnComplete;
-		
+
 	private:
 		/** 持有对 UGridMapModel 的引用，以便在任务中访问 */
 		UGridMapModel* Owner;
-		
+
 		/** 需要处理的原始数据 */
 		const TMap<FHCubeCoord, FSerializableTile>& TilesData;
-		
+
 		/** 输出的目标数组 */
 		TSharedPtr<TArray<FTileInfo>> TargetTilesPtr;
 
@@ -144,16 +144,16 @@ protected:
 		/** 输出的环境数据 */
 		TSharedPtr<TMap<FHCubeCoord, FTileEnvData>> TargetTileEnvDataMapPtr;
 	};
-	
+
 	/** 当前正在运行的异步任务 */
 	TSharedPtr<FAsyncTask<FBuildTilesDataTask>> BuildTilesDataTask;
-	
+
 	/** 标记异步任务是否被取消 */
 	bool BuildTilesDataTaskCancelled = false;
-	
+
 	/** 用于保护 Tiles 数组的线程锁 */
 	FCriticalSection TilesLock;
-	
+
 public:
 	// 辅助函数, Stable 前缀的函数 表示不依赖该格子是否存在Tile
 	// ---------- 坐标转换 Start -----------------
@@ -167,13 +167,25 @@ public:
 	FHCubeCoord StableWorldToCoord(const FVector& InWorldLocation);
 	FVector StableSnapToGridLocation(const FVector& InWorldLocation);
 
-	FIntVector2 StableCoordToRowColumn(const FHCubeCoord& InCoord) const;
-	FHCubeCoord StableRowColumnToCoord(const FIntVector2& InRowColumn) const;
+	FIntPoint StableCoordToRowColumn(const FHCubeCoord& InCoord) const;
+	FHCubeCoord StableRowColumnToCoord(const FIntPoint& InRowColumn) const;
 
 	// ---------- 坐标转换 End -----------------
 
 	// ---------- 方向、邻居 Start -----------------
 
+	/**
+	 * 0 Top	
+	 * 1 Top Right
+	 * 2 Bottom Right
+	 * 3 Bottom
+	 * 4 Bottom Left
+	 * 5 Top Left
+	 * @param InCoord 
+	 * @param InDirection  
+	 * @return 
+	 */
+	const FHCubeCoord GetNeighborCoord(const FHCubeCoord& InCoord, int32 InDirection) const;
 
 	// ---------- 方向、邻居 End -----------------
 
@@ -181,7 +193,7 @@ public:
 	 * Coord是否在地图范围内
 	 */
 	bool IsCoordInMapArea(const FHCubeCoord& InCoord) const;
-	
+
 	int GetTileIndex(const FHCubeCoord& InCoord) const;
 
 	/**
@@ -202,15 +214,19 @@ public:
 
 	int32 StableGetCoordChunkIndex(const FHCubeCoord& InCoord) const;
 
+	int32 GetDistance(const FHCubeCoord& A, const FHCubeCoord& B) const;
+
 	void StableGetChunkCoords(const int32 InChunkIndex, TArray<FHCubeCoord>& OutCoords) const;
 	// ---------- Chunk 分区功能 End------------------
 
 	static FTileInfo IntervalCreateTileInfo(const FSerializableTile& InTileData);
-private:
-	FSixDirections SixDirections{};
-	
+
 	// 提取获取布局的辅助函数
 	static FHTileOrientation GetTileOrientation(EGridMapType InMapType, ETileOrientationFlag InOrientation);
-	
-	FHCubeCoord HexCoordRound(const FHFractional &F);
+
+	TArray<FHCubeCoord> GetRangeCoords(const FHCubeCoord& Center, int32 Radius) const;
+private:
+	FSixDirections SixDirections{};
+
+	FHCubeCoord HexCoordRound(const FHFractional& F);
 };

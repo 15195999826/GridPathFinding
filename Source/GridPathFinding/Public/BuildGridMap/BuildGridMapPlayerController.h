@@ -5,7 +5,9 @@
 #include "CoreMinimal.h"
 #include "BuildGridMapGameMode.h"
 #include "LomoGeneralPlayerController.h"
+#include "Components/SelectionComponent.h"
 #include "Types/HCubeCoord.h"
+#include "InputCoreTypes.h"
 
 #include "BuildGridMapPlayerController.generated.h"
 
@@ -29,7 +31,13 @@ class GRIDPATHFINDING_API ABuildGridMapPlayerController : public ALomoGeneralPla
 	GENERATED_BODY()
 
 public:
+	ABuildGridMapPlayerController();
 	virtual void BeginPlay() override;
+	virtual void SetupInputComponent() override;
+
+	// 选择组件
+	UPROPERTY(VisibleAnywhere, Category="Selection")
+	TObjectPtr<USelectionComponent> SelectionComponent;
 
 protected:
 	UPROPERTY()
@@ -37,17 +45,29 @@ protected:
 	virtual void RemapHitLocation(FVector& HitLocation) override;
 
 	virtual void CustomTick(float DeltaSeconds, bool OverWidget, bool IsHitGround, const FVector& HitGroundLocation, AActor* InHitActor) override;
+
 public:
 	UFUNCTION(BlueprintCallable)
 	void ChangeMouseMode(EMouseMode InMouseMode);
-	
+
 	const FHCubeCoord& GetFirstSelectedCoord() const
 	{
-		if (SelectedCoords.Num() > 0)
+		if (!SelectionComponent)
 		{
-			return SelectedCoords[0];
+			UE_LOG(LogTemp, Error, TEXT("[ABuildGridMapPlayerController.GetFirstSelectedCoord] SelectionComponent Invalid!"));
+			return FHCubeCoord::Invalid;
+		}
+
+		if (SelectionComponent->GetSelectedTiles().Num() > 0)
+		{
+			return SelectionComponent->GetSelectedTiles()[0];
 		}
 		return FHCubeCoord::Invalid;
+	}
+
+	const TArray<FHCubeCoord>& GetSelectedCoords() const
+	{
+		return SelectionComponent->GetSelectedTiles();
 	}
 
 	void SetCanInput(bool bCanInput)
@@ -58,13 +78,25 @@ public:
 protected:
 	UPROPERTY(BlueprintReadOnly)
 	bool CanNotInput{false};
-	
+
 private:
 	EMouseMode MouseMode{EMouseMode::SingleSelect};
 
-	// 单选模式
-	TArray<FHCubeCoord> SelectedCoords;
-	
 	void OnSaveStart(EBuildGridMapSaveMode BuildGridMapSaveMode);
 	void OnSaveOver();
+
+	// 鼠标/键盘绑定 start
+	void OnLeftMousePressHandler(float DeltaSeconds, bool OverWidget, bool IsHitGround,
+	                             const FVector& HitGroundLocation, AActor* InHitActor);
+	void OnLeftMousePressingHandler(float DeltaSeconds, bool OverWidget, bool IsHitGround,
+	                                const FVector& HitGroundLocation, AActor* InHitActor);
+	void OnLeftMouseReleaseHandler(float DeltaSeconds, bool OverWidget, bool IsHitGround,
+	                               const FVector& HitGroundLocation, AActor* InHitActor);
+	void OnRightMouseReleaseHandler(float DeltaSeconds, bool OverWidget, bool IsHitGround,
+	                                const FVector& HitGroundLocation, AActor* InHitActor);
+
+	void OnKeyBoardZPressedHandler();
+	void OnKeyBoardLeftShiftPressHandler();
+	void OnKeyBoardLeftShiftReleaseHandler();
+	// 鼠标/键盘绑定 end
 };

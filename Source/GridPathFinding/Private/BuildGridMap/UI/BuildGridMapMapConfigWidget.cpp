@@ -3,6 +3,7 @@
 
 #include "BuildGridMap/UI/BuildGridMapMapConfigWidget.h"
 
+#include "GridPathFinding.h"
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
 #include "Components/PanelWidget.h"
@@ -44,7 +45,7 @@ void UBuildGridMapMapConfigWidget::NativeConstruct()
 					EGridMapDrawMode::BaseOnRowColumn,
 					{GridSizeXTextBox, GridSizeYTextBox, TileOrientationComboBox, MapRowTextBox, MapColumnTextBox}
 				},
-				{EGridMapDrawMode::BaseOnVolume, {GridSizeXTextBox, GridSizeYTextBox,TileOrientationComboBox}}
+				{EGridMapDrawMode::BaseOnVolume, {GridSizeXTextBox, GridSizeYTextBox, TileOrientationComboBox}}
 			}
 		}
 	};
@@ -72,7 +73,7 @@ void UBuildGridMapMapConfigWidget::NativeConstruct()
 		FString EnumName = MapDrawModeEnum->GetDisplayNameTextByIndex(i).ToString();
 		MapDrawModeComboBox->AddOption(EnumName);
 	}
-	
+
 	// 针对 EHexTileOrientationFlag
 	TileOrientationComboBox->ClearOptions();
 	UEnum* HexTileOrientationEnum = StaticEnum<ETileOrientationFlag>();
@@ -90,61 +91,63 @@ void UBuildGridMapMapConfigWidget::NativeConstruct()
 
 void UBuildGridMapMapConfigWidget::SetMapConfig(const FName& InMapName, const FGridMapConfig& MapConfig)
 {
-    // 设置地图名称
-    MapNameTextBox->SetText(FText::FromName(InMapName));
-    
-    // 设置地图类型
-    UEnum* MapTypeEnum = StaticEnum<EGridMapType>();
-    int64 MapTypeValue = static_cast<int64>(MapConfig.MapType);
-    FString MapTypeName = MapTypeEnum->GetDisplayNameTextByValue(MapTypeValue).ToString();
-    MapTypeComboBox->SetSelectedOption(MapTypeName);
-    
-    // 设置地图绘制模式
-    UEnum* MapDrawModeEnum = StaticEnum<EGridMapDrawMode>();
-    int64 MapDrawModeValue = static_cast<int64>(MapConfig.DrawMode);
-    FString MapDrawModeName = MapDrawModeEnum->GetDisplayNameTextByValue(MapDrawModeValue).ToString();
-    MapDrawModeComboBox->SetSelectedOption(MapDrawModeName);
-    
-    // 设置六边形地图格子方向（仅当地图类型为六边形时适用）
-    if (MapConfig.MapType == EGridMapType::HEX_STANDARD)
-    {
-        UEnum* HexOrientationEnum = StaticEnum<ETileOrientationFlag>();
-        int64 HexOrientationValue = static_cast<int64>(MapConfig.TileOrientation);
-        FString HexOrientationName = HexOrientationEnum->GetDisplayNameTextByValue(HexOrientationValue).ToString();
-        TileOrientationComboBox->SetSelectedOption(HexOrientationName);
-        // 显示六边形相关控件
-        TileOrientationComboBox->SetVisibility(ESlateVisibility::Visible);
-    }
-    else
-    {
-        // 隐藏六边形相关控件
-        TileOrientationComboBox->SetVisibility(ESlateVisibility::Collapsed);
-    }
-    
-    // 设置地图尺寸信息
-    MapRowTextBox->SetText(FText::AsNumber(MapConfig.MapSize.X));
-    MapColumnTextBox->SetText(FText::AsNumber(MapConfig.MapSize.Y));
-    
-    // 设置格子尺寸
-    switch (MapConfig.MapType) {
-	    case EGridMapType::HEX_STANDARD:
-		    {
-	    		GridRadiusTextBox->SetText(FText::AsNumber(MapConfig.HexGridRadius));
-		    }
-		    break;
-	    case EGridMapType::SQUARE_STANDARD:
-		    {
-			    GridRadiusTextBox->SetText(FText::AsNumber(MapConfig.SquareSize));
-		    }
-		    break;
-	    case EGridMapType::RECTANGLE_STANDARD:
-	    case EGridMapType::RECTANGLE_SIX_DIRECTION:
-		    {
-	    		GridSizeXTextBox->SetText(FText::AsNumber(MapConfig.RectSize.X));
-	    		GridSizeYTextBox->SetText(FText::AsNumber(MapConfig.RectSize.Y));
-		    }
-		    break;
-    }
+	UE_LOG(LogGridPathFinding, Display, TEXT("[UBuildGridMapMapConfigWidget.SetMapConfig]"));
+	// 设置地图名称
+	MapNameTextBox->SetText(FText::FromName(InMapName));
+
+	// 设置地图类型
+	UEnum* MapTypeEnum = StaticEnum<EGridMapType>();
+	int64 MapTypeValue = static_cast<int64>(MapConfig.MapType);
+	FString MapTypeName = MapTypeEnum->GetDisplayNameTextByValue(MapTypeValue).ToString();
+	MapTypeComboBox->SetSelectedOption(MapTypeName);
+
+	// 设置地图绘制模式
+	UEnum* MapDrawModeEnum = StaticEnum<EGridMapDrawMode>();
+	int64 MapDrawModeValue = static_cast<int64>(MapConfig.DrawMode);
+	FString MapDrawModeName = MapDrawModeEnum->GetDisplayNameTextByValue(MapDrawModeValue).ToString();
+	MapDrawModeComboBox->SetSelectedOption(MapDrawModeName);
+
+	// 设置六边形地图格子方向（仅当地图类型为六边形时适用）
+	if (MapConfig.MapType == EGridMapType::HEX_STANDARD)
+	{
+		UEnum* HexOrientationEnum = StaticEnum<ETileOrientationFlag>();
+		int64 HexOrientationValue = static_cast<int64>(MapConfig.TileOrientation);
+		FString HexOrientationName = HexOrientationEnum->GetDisplayNameTextByValue(HexOrientationValue).ToString();
+		TileOrientationComboBox->SetSelectedOption(HexOrientationName);
+		// 显示六边形相关控件
+		TileOrientationComboBox->SetVisibility(ESlateVisibility::Visible);
+	}
+	else
+	{
+		// 隐藏六边形相关控件
+		TileOrientationComboBox->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	// 设置地图尺寸信息
+	MapRowTextBox->SetText(FText::AsNumber(MapConfig.MapSize.X));
+	MapColumnTextBox->SetText(FText::AsNumber(MapConfig.MapSize.Y));
+
+	// 设置格子尺寸
+	switch (MapConfig.MapType)
+	{
+	case EGridMapType::HEX_STANDARD:
+		{
+			GridRadiusTextBox->SetText(FText::AsNumber(MapConfig.HexGridRadius));
+		}
+		break;
+	case EGridMapType::SQUARE_STANDARD:
+		{
+			GridRadiusTextBox->SetText(FText::AsNumber(MapConfig.SquareSize));
+		}
+		break;
+	case EGridMapType::RECTANGLE_STANDARD:
+	case EGridMapType::RECTANGLE_SIX_DIRECTION:
+		{
+			GridSizeXTextBox->SetText(FText::AsNumber(MapConfig.RectSize.X));
+			GridSizeYTextBox->SetText(FText::AsNumber(MapConfig.RectSize.Y));
+		}
+		break;
+	}
 }
 
 void UBuildGridMapMapConfigWidget::OnMapTypeSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
@@ -156,14 +159,15 @@ void UBuildGridMapMapConfigWidget::OnMapTypeSelectionChanged(FString SelectedIte
 	UpdateShowLine(MapType, MapDrawMode);
 
 	// UI上改变选择时， 发送事件， 处理逻辑
-	switch (SelectionType) {
-		case ESelectInfo::OnMouseClick:
-			{
-				OnMapTypeChanged.Broadcast(MapType);
-			}
-			break;
-		default:
-			break;
+	switch (SelectionType)
+	{
+	case ESelectInfo::OnMouseClick:
+		{
+			OnMapTypeChanged.Broadcast(MapType);
+		}
+		break;
+	default:
+		break;
 	}
 }
 
@@ -174,29 +178,31 @@ void UBuildGridMapMapConfigWidget::OnMapDrawModeSelectionChanged(FString Selecte
 	auto MapDrawMode = GetMapDrawModeFromString(SelectedItem);
 	UpdateShowLine(MapType, MapDrawMode);
 
-	switch (SelectionType) {
-		case ESelectInfo::OnMouseClick:
-			{
-				OnMapDrawModeChanged.Broadcast(MapDrawMode);
-			}
+	switch (SelectionType)
+	{
+	case ESelectInfo::OnMouseClick:
+		{
+			OnMapDrawModeChanged.Broadcast(MapDrawMode);
+		}
 		break;
-		default:
-			break;
+	default:
+		break;
 	}
 }
 
 void UBuildGridMapMapConfigWidget::OnHexTileOrientationSelectionChanged(FString SelectedItem,
-	ESelectInfo::Type SelectionType)
+                                                                        ESelectInfo::Type SelectionType)
 {
-	switch (SelectionType) {
-		case ESelectInfo::OnMouseClick:
-			{
-				auto TileOrientation = GetTileOrientationFromString(SelectedItem);
-				OnTileOrientationChanged.Broadcast(TileOrientation);
-			}
+	switch (SelectionType)
+	{
+	case ESelectInfo::OnMouseClick:
+		{
+			auto TileOrientation = GetTileOrientationFromString(SelectedItem);
+			OnTileOrientationChanged.Broadcast(TileOrientation);
+		}
 		break;
-		default:
-			break;
+	default:
+		break;
 	}
 }
 
@@ -257,56 +263,56 @@ ETileOrientationFlag UBuildGridMapMapConfigWidget::GetTileOrientationFromString(
 void UBuildGridMapMapConfigWidget::UpdateShowLine(EGridMapType InMapType, EGridMapDrawMode InDrawMode)
 {
 	// 创建一个Map来存储每个组件的可见性
-    TMap<UWidget*, ESlateVisibility> VisibilityMap;
-    
-    // 初始化所有组件为Collapsed
-    TArray<UWidget*> AllWidgets = {
-    	TileOrientationComboBox,
-        GridSizeXTextBox,
-        GridSizeYTextBox,
-        GridRadiusTextBox,
-        MapRowTextBox,
-        MapColumnTextBox,
-        MapRadiusTextBox
-    };
-    
-    for (auto* Widget : AllWidgets)
-    {
-        VisibilityMap.Add(Widget, ESlateVisibility::Collapsed);
-    }
-	
-    // 应用可见性规则
-    if (const auto* MapTypeRules = VisibilityRules.Find(InMapType))
-    {
-        if (const auto* VisibleWidgets = MapTypeRules->Find(InDrawMode))
-        {
-            for (auto* Widget : *VisibleWidgets)
-            {
-                if (Widget)
-                {
-                    VisibilityMap[Widget] = ESlateVisibility::Visible;
-                }
-            }
-        }
-    }
+	TMap<UWidget*, ESlateVisibility> VisibilityMap;
 
-    // 如果是体积绘制模式，记录日志
-    if (InDrawMode == EGridMapDrawMode::BaseOnVolume)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Todo: 体积绘制功能待实现"));
-    }
+	// 初始化所有组件为Collapsed
+	TArray<UWidget*> AllWidgets = {
+		TileOrientationComboBox,
+		GridSizeXTextBox,
+		GridSizeYTextBox,
+		GridRadiusTextBox,
+		MapRowTextBox,
+		MapColumnTextBox,
+		MapRadiusTextBox
+	};
 
-    // 应用可见性设置
-    for (const auto& Pair : VisibilityMap)
-    {
-    	auto Parent = Pair.Key->GetParent();
-    	if (Parent)
+	for (auto* Widget : AllWidgets)
+	{
+		VisibilityMap.Add(Widget, ESlateVisibility::Collapsed);
+	}
+
+	// 应用可见性规则
+	if (const auto* MapTypeRules = VisibilityRules.Find(InMapType))
+	{
+		if (const auto* VisibleWidgets = MapTypeRules->Find(InDrawMode))
+		{
+			for (auto* Widget : *VisibleWidgets)
+			{
+				if (Widget)
+				{
+					VisibilityMap[Widget] = ESlateVisibility::Visible;
+				}
+			}
+		}
+	}
+
+	// 如果是体积绘制模式，记录日志
+	if (InDrawMode == EGridMapDrawMode::BaseOnVolume)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Todo: 体积绘制功能待实现"));
+	}
+
+	// 应用可见性设置
+	for (const auto& Pair : VisibilityMap)
+	{
+		auto Parent = Pair.Key->GetParent();
+		if (Parent)
 		{
 			Parent->SetVisibility(Pair.Value);
 		}
-    	else
-    	{
-    		Pair.Key->SetVisibility(Pair.Value);
-    	}
-    }
+		else
+		{
+			Pair.Key->SetVisibility(Pair.Value);
+		}
+	}
 }

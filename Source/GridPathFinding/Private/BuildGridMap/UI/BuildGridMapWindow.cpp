@@ -6,6 +6,7 @@
 #include "EngineUtils.h"
 #include "GridMapModel.h"
 #include "GridMapRenderer.h"
+#include "GridPathFinding.h"
 #include "GridPathFindingBlueprintFunctionLib.h"
 #include "GridPathFindingSettings.h"
 #include "JsonObjectConverter.h"
@@ -31,11 +32,20 @@ void UBuildGridMapWindow::NativeConstruct()
 	// 指令相关的事件监听
 	auto CommandManager = GM->GetCommandManager();
 	CommandManager->OnChangeMapName.AddUObject(this, &UBuildGridMapWindow::OnChangeMapName);
+	CommandManager->OnChangeMapSizeX.AddUObject(this, &UBuildGridMapWindow::OnChangeMapSizeX);
+	CommandManager->OnChangeMapSizeY.AddUObject(this, &UBuildGridMapWindow::OnChangeMapSizeY);
 }
 
-void UBuildGridMapWindow::SingleSelectTile_Implementation(const FHCubeCoord& SelectedCoord)
+void UBuildGridMapWindow::SingleSelectTileCoord_Implementation(const FHCubeCoord& SelectedCoord)
 {
-	TileConfigWidget->BindSingleCoord(SelectedCoord);
+	UE_LOG(LogGridPathFinding, Log, TEXT("[UBuildGridMapWindow.SingleSelectTileCoord_Impl]"));
+	TileConfigWidget->BindSingleTileCoord(SelectedCoord);
+}
+
+void UBuildGridMapWindow::SingleSelectTileData_Implementation(const FSerializableTile& InTileData)
+{
+	UE_LOG(LogGridPathFinding, Log, TEXT("[UBuildGridMapWindow.SingleSelectTileData_Impl]"));
+	TileConfigWidget->BindSingleTileData(InTileData);
 }
 
 void UBuildGridMapWindow::OnEmptyEditingMapSave()
@@ -60,4 +70,16 @@ void UBuildGridMapWindow::OnChangeMapName(const FName& InOldName, const FName& I
 {
 	EditingMapNameText->SetText(FText::FromName(InNewName));
 	ChangeMapGroupButtonText(InOldName, InNewName);
+}
+
+void UBuildGridMapWindow::OnChangeMapSizeX(int32 InOldSizeX, int32 InNewSizeX)
+{
+	UE_LOG(LogGridPathFinding, Log, TEXT("[UBuildGridMapWindow.OnChangeMapSizeX] oldX: %d newX: %d"), InOldSizeX, InNewSizeX);
+	MapConfigWidget->MapRowTextBox->SetText(FText::AsNumber(InNewSizeX));
+}
+
+void UBuildGridMapWindow::OnChangeMapSizeY(int32 InOldSizeY, int32 InNewSizeY)
+{
+	UE_LOG(LogGridPathFinding, Log, TEXT("[UBuildGridMapWindow.OnChangeMapSizeY] oldY: %d newY: %d"), InOldSizeY, InNewSizeY);
+	MapConfigWidget->MapColumnTextBox->SetText(FText::AsNumber(InNewSizeY));
 }

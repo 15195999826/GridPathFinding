@@ -44,7 +44,7 @@ bool UBuildGridMapChangeTileEnvCommand::Execute()
 			GM->GetMutEditingTiles().Remove(Coord);
 			// 同时重置UI上输入框的数据
 			// 重置输入框内容， 当环境设置为空时， 数据上删除了该格子的数据
-			GM->GetBuildGridMapWindow()->TileConfigWidget->BindSingleCoord(Coord);
+			GM->GetBuildGridMapWindow()->TileConfigWidget->BindSingleTileCoord(Coord);
 			// 通知GridModel移除了格子
 			GM->GridMapModel->ModifyTilesData(EGridMapModelTileModifyType::Remove, SerializableTile);
 		}

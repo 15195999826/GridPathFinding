@@ -2,6 +2,8 @@
 
 #include "BuildGridMap/Command/BuildGridMapCommandManager.h"
 
+#include "GridPathFinding.h"
+
 UBuildGridMapCommandManager::UBuildGridMapCommandManager()
 {
 	CurrentCommandIndex = -1;
@@ -10,6 +12,7 @@ UBuildGridMapCommandManager::UBuildGridMapCommandManager()
 
 bool UBuildGridMapCommandManager::ExecuteCommand(TScriptInterface<IGridMapCommand> Command)
 {
+	UE_LOG(LogGridPathFinding, Log, TEXT("[BuildGridMapCommandManager.ExecuteCommand] %s"), *Command.GetObject()->GetName());
 	if (!Command)
 	{
 		return false;
@@ -51,7 +54,8 @@ bool UBuildGridMapCommandManager::UndoCommand()
 	{
 		CurrentCommandIndex--;
 	}
-	
+
+	UE_LOG(LogGridPathFinding, Log, TEXT("[BuildGridMapCommandManager.UndoCommand] succeed: %d"), bUndoSuccess);
 	return bUndoSuccess;
 }
 
@@ -68,7 +72,8 @@ bool UBuildGridMapCommandManager::RedoCommand()
 	{
 		CurrentCommandIndex++;
 	}
-	
+
+	UE_LOG(LogGridPathFinding, Log, TEXT("[BuildGridMapCommandManager.RedoCommand] succeed: %d"), bRedoSuccess);
 	return bRedoSuccess;
 }
 
@@ -109,6 +114,36 @@ int32 UBuildGridMapCommandManager::GetMaxHistoryCount() const
 	return MaxHistoryCount;
 }
 
+FString UBuildGridMapCommandManager::GetHistoryCommandInfo() const
+{
+	FString Ret = TEXT("Command History:\n");
+
+	for (int32 i = 0; i < CommandHistory.Num(); ++i)
+	{
+		FString CommandName = TEXT("Unknown Command");
+		if (CommandHistory[i])
+		{
+			CommandName = CommandHistory[i]->GetDescription();
+		}
+
+		if (i == CurrentCommandIndex)
+		{
+			Ret += FString::Printf(TEXT("[%d] -> %s(Current)\n"), i, *CommandName);
+		}
+		else
+		{
+			Ret += FString::Printf(TEXT("[%d] %s()\n"), i, *CommandName);
+		}
+	}
+
+	if (CommandHistory.Num() == 0)
+	{
+		Ret += TEXT("No commands executed yet.");
+	}
+
+	return Ret;
+}
+
 void UBuildGridMapCommandManager::EnforceHistoryLimit()
 {
 	// 如果MaxHistoryCount为0，表示不限制历史记录数量
@@ -126,4 +161,4 @@ void UBuildGridMapCommandManager::EnforceHistoryLimit()
 		// 更新当前命令索引
 		CurrentCommandIndex = FMath::Max(0, CurrentCommandIndex - ExcessCount);
 	}
-} 
+}

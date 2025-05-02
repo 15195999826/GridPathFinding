@@ -21,6 +21,7 @@ UCLASS()
 class GRIDPATHFINDING_API UBuildGridMapWindow : public UUserWidget
 {
 	GENERATED_BODY()
+
 public:
 	virtual void NativeConstruct() override;
 
@@ -37,13 +38,17 @@ protected:
 
 public:
 	UFUNCTION(BlueprintNativeEvent)
-	void SingleSelectTile(const FHCubeCoord& SelectedCoord);
+	void SingleSelectTileCoord(const FHCubeCoord& SelectedCoord);
+
+	UFUNCTION(BlueprintNativeEvent)
+	void SingleSelectTileData(const FSerializableTile& InTileData);
 
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable)
 	void UpdateMapGroup(const FString& SelectedMapName, bool bNotifySelected);
 
 	UFUNCTION(BlueprintImplementableEvent)
 	void SetCanInput(bool bCond);
+
 protected:
 	UFUNCTION(BlueprintImplementableEvent)
 	void ChangeMapGroupButtonText(const FName& InOldMapName, const FName& InNewMapName);
@@ -54,11 +59,11 @@ protected:
 	void OnSaveOver();
 	UFUNCTION(BlueprintImplementableEvent)
 	void OnCreateGridMapSave();
-	
+
 private:
-	
 	void OnEmptyEditingMapSave();
 	void OnSwitchEditingMapSave();
 	void OnChangeMapName(const FName& InOldName, const FName& InNewName);
-	
+	void OnChangeMapSizeX(int32 InOldSizeX, int32 InNewSizeX);
+	void OnChangeMapSizeY(int32 InOldSizeY, int32 InNewSizeY);
 };

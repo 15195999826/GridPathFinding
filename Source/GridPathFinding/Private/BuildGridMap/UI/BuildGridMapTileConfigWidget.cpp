@@ -5,6 +5,8 @@
 
 #include "GridEnvironmentType.h"
 #include "GridMapModel.h"
+#include "GridPathFinding.h"
+#include "GridPathFindingBlueprintFunctionLib.h"
 #include "GridPathFindingSettings.h"
 #include "BuildGridMap/BuildGridMapGameMode.h"
 #include "Components/ComboBoxString.h"
@@ -18,9 +20,9 @@ void UBuildGridMapTileConfigWidget::NativeConstruct()
 	EnvComboBox->ClearOptions();
 	EnvTypeMap.Empty();
 	EnvType2DisplayNameMap.Empty();
-	
+
 	EnvComboBox->AddOption(UGridEnvironmentType::EmptyEnvTypeID.ToString());
-	
+
 	auto Settings = GetDefault<UGridPathFindingSettings>();
 	for (const auto& SoftEnvType : Settings->EnvironmentTypes)
 	{
@@ -39,39 +41,64 @@ void UBuildGridMapTileConfigWidget::NativeConstruct()
 	EnvComboBox->OnSelectionChanged.AddDynamic(this, &UBuildGridMapTileConfigWidget::OnEnvTypeSelectionChanged);
 }
 
-void UBuildGridMapTileConfigWidget::BindSingleCoord(FHCubeCoord SelectedCoord)
+void UBuildGridMapTileConfigWidget::BindSingleTileCoord(FHCubeCoord SelectedCoord)
 {
+	UE_LOG(LogGridPathFinding, Log, TEXT("[UBuildGridMapTileConfigWidget.BindSingleTileCoord]"));
+
 	auto GM = GetWorld()->GetAuthGameMode<ABuildGridMapGameMode>();
 	auto RowCol = GM->GridMapModel->StableCoordToRowColumn(SelectedCoord);
 	TileRowText->SetText(FText::FromString(FString::Printf(TEXT("Row: %d"), RowCol.X)));
-	TileColumnText->SetText(FText::FromString(FString::Printf(TEXT("Column: %d"), RowCol.Y)));
+	TileColumnText->SetText(FText::FromString(FString::Printf(TEXT("Col: %d"), RowCol.Y)));
 	auto EditingTile = GM->GetEditingTile(SelectedCoord);
+
+	UE_LOG(LogGridPathFinding, Log, TEXT("[UBuildGridMapTileConfigWidget.BindSingleTileCoord] EnvType:%s"), *EditingTile.EnvironmentType.ToString());
+
 	if (EnvType2DisplayNameMap.Contains(EditingTile.EnvironmentType))
 	{
 		EnvComboBox->SetSelectedOption(EnvType2DisplayNameMap[EditingTile.EnvironmentType]);
-    }
-    else
-    {
-        EnvComboBox->SetSelectedIndex(0);
+	}
+	else
+	{
+		EnvComboBox->SetSelectedIndex(0);
 	}
 	EnvTextureIndexTextBox->SetText(FText::FromString(FString::Printf(TEXT("%d"), EditingTile.TileEnvData.TextureIndex)));
 }
 
+void UBuildGridMapTileConfigWidget::BindSingleTileData(const FSerializableTile& InTileData)
+{
+	UE_LOG(LogGridPathFinding, Log, TEXT("[UBuildGridMapTileConfigWidget.BindSingleTileData]"));
+
+	auto MyGameMode = GetWorld()->GetAuthGameMode<ABuildGridMapGameMode>();
+	auto RowCol = MyGameMode->GridMapModel->StableCoordToRowColumn(InTileData.Coord);
+	TileRowText->SetText(FText::FromString(FString::Printf(TEXT("Row: %d"), RowCol.X)));
+	TileColumnText->SetText(FText::FromString(FString::Printf(TEXT("Col: %d"), RowCol.Y)));
+	if (EnvType2DisplayNameMap.Contains(InTileData.EnvironmentType))
+	{
+		EnvComboBox->SetSelectedOption(EnvType2DisplayNameMap[InTileData.EnvironmentType]);
+	}
+	else
+	{
+		EnvComboBox->SetSelectedIndex(0);
+	}
+	EnvTextureIndexTextBox->SetText(FText::FromString(FString::Printf(TEXT("%d"), InTileData.TileEnvData.TextureIndex)));
+}
+
 void UBuildGridMapTileConfigWidget::OnEnvTypeSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
 {
-	switch (SelectionType) {
-		case ESelectInfo::OnMouseClick:
+	switch (SelectionType)
+	{
+	case ESelectInfo::OnMouseClick:
+		{
+			// SelectedItem To EnvType
+			TObjectPtr<UGridEnvironmentType> EnvType = nullptr;
+			if (EnvTypeMap.Contains(SelectedItem))
 			{
-				// SelectedItem To EnvType
-				TObjectPtr<UGridEnvironmentType> EnvType = nullptr;
-				if (EnvTypeMap.Contains(SelectedItem))
-				{
-					EnvType = EnvTypeMap[SelectedItem];
-				}
-				OnTileEnvChanged.Broadcast(EnvType);
+				EnvType = EnvTypeMap[SelectedItem];
 			}
-			break;
-		default:
-			break;
+			OnTileEnvChanged.Broadcast(EnvType);
+		}
+		break;
+	default:
+		break;
 	}
 }

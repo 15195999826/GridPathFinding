@@ -241,12 +241,12 @@ struct FSixDirections
 
 	FSixDirections()
 	{	//   Flat			| Pointy
-		Directions.Add(FHCubeCoord(FIntVector(0, 1, -1)));	// 0 Top			| Top Left
-		Directions.Add(FHCubeCoord(FIntVector(1, 0, -1)));	// 1 Top Right		| Top Right
-		Directions.Add(FHCubeCoord(FIntVector(1, -1, 0)));	// 2 Bottom Right	| Right
-		Directions.Add(FHCubeCoord(FIntVector(0, -1, 1)));	// 3 Bottom			| Bottom Right
-		Directions.Add(FHCubeCoord(FIntVector(-1, 0, 1)));	// 4 Bottom Left	| Bottom Left
-		Directions.Add(FHCubeCoord(FIntVector(-1, 1, 0)));	// 5 Top Left		| Left
+		Directions.Add(FHCubeCoord(FIntVector(0, -1, 1)));	// 0 Top			| Top Left
+		Directions.Add(FHCubeCoord(FIntVector(1, -1, 0)));	// 1 Top Right		| Top Right
+		Directions.Add(FHCubeCoord(FIntVector(1, 0, -1)));	// 2 Bottom Right	| Right
+		Directions.Add(FHCubeCoord(FIntVector(0, 1, -1)));	// 3 Bottom			| Bottom Right
+		Directions.Add(FHCubeCoord(FIntVector(-1, 1, 0)));	// 4 Bottom Left	| Bottom Left
+		Directions.Add(FHCubeCoord(FIntVector(-1, 0, 1)));	// 5 Top Left		| Left
 	}
 
 	UPROPERTY(BlueprintReadOnly, Category = GridPathFinding)
@@ -255,7 +255,6 @@ struct FSixDirections
 	UPROPERTY(BlueprintReadOnly, Category = GridPathFinding)
 	TArray<FVector> DirVectors;
 };
-
 
 /**
  * @see  https://www.redblobgames.com/grids/hexagons/#neighbors
@@ -337,7 +336,6 @@ const struct FHPointyOrientation : FHTileOrientation
 	}
 
 }HPointyLayout;
-
 
 /**
  * 平顶矩形地图的方向矩阵(对应左右方向短， 上下方向长)，描述上在rect这里确实不能叫平顶， 但是为了与六边形地图的方式保持一致

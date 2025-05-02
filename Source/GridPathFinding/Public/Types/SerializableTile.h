@@ -18,7 +18,7 @@ struct FSerializableTile
 	}
 
 	static const FSerializableTile Invalid;
-	
+
 	// 坐标， 行列表示, 六边形地图中， 读取后转化为HCubeCoord
 	UPROPERTY()
 	FHCubeCoord Coord;
@@ -34,4 +34,18 @@ struct FSerializableTile
 
 	UPROPERTY()
 	FString CustomGameplayData;
+
+	friend bool operator==(const FSerializableTile& lhs, const FSerializableTile& rhs)
+	{
+		return /*lhs.Coord == rhs.Coord &&*/
+			FMath::IsNearlyEqual(lhs.Height, rhs.Height) &&
+			lhs.EnvironmentType == rhs.EnvironmentType &&
+			lhs.TileEnvData == rhs.TileEnvData &&
+			lhs.CustomGameplayData == rhs.CustomGameplayData;
+	}
+
+	friend bool operator!=(const FSerializableTile& lhs, const FSerializableTile& rhs)
+	{
+		return !(lhs == rhs);
+	}
 };

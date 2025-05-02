@@ -34,28 +34,28 @@ class GRIDPATHFINDING_API ABuildGridMapGameMode : public AGameModeBase
 	GENERATED_BODY()
 
 	inline static FGridMapSave EmptyMapSave{};
-	
+
 public:
 	virtual void BeginPlay() override;
 
 public:
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category=Config)
 	bool DebugSave{false};
-	
+
 	// 实际保存的地图
 	UPROPERTY(BlueprintReadOnly)
 	TObjectPtr<UGridMapModel> GridMapModel;
-	
+
 	UPROPERTY(BlueprintReadOnly)
 	TObjectPtr<ABuildGridMapRenderer> BuildGridMapRenderer;
-	
+
+	UPROPERTY(BlueprintReadOnly)
+	TObjectPtr<UBuildGridMapCommandManager> CommandManager;
+
 protected:
 	// 在蓝图中创建和赋值
 	UPROPERTY(BlueprintReadWrite)
 	TObjectPtr<UBuildGridMapWindow> BuildGridMapWindow;
-	
-	UPROPERTY(BlueprintReadOnly)
-	TObjectPtr<UBuildGridMapCommandManager> CommandManager;
 
 public:
 	// 编辑地图相关事件
@@ -68,18 +68,18 @@ public:
 private:
 	UPROPERTY()
 	FGridMapSave EditingMapSave;
-	
+
 	TMap<FHCubeCoord, FSerializableTile> EditingTiles;
-	
+
 	// --------- 数据保存相关 Start ---------
 public:
 	// 保存进度更新委托
 	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FSaveProgressDelegate, float, Progress, FString, StatusMessage);
-    
+
 	// 进度更新委托
 	UPROPERTY(BlueprintAssignable, Category = "GridPathFinding|Save")
 	FSaveProgressDelegate OnSaveProgressUpdated;
-	
+
 	/**
 	 * Save不使用命令模式， 不允许撤销和重做
 	 * Todo: 每隔60秒自动保存一次， 自动保存为异步保存(保存到那一帧的状态， 保存过程的改变不生效)， 手动按下Ctrl+S时UI出现Mask， 禁止其它操作
@@ -90,19 +90,20 @@ public:
 	void IntervalMapSaveToFile(const FGridMapSave& InMapSave);
 
 	void MarkEditingTilesDirty(const FHCubeCoord& InDirtyCoord);
-	
+
 	void MarkEditingTilesDirty(const TArray<FHCubeCoord>& InDirtyCoords);
+
 private:
 	// 当前正在编辑的地图是否为有效的地图
 	UPROPERTY()
 	bool HasValidMapSave{false};
-	
+
 	UPROPERTY()
 	bool bIsSaving{false};
 
 	// 只记录需要更新的Chunk
 	TSet<int32> DirtyChunks;
-	
+
 	// 用于在异步任务间共享的进度信息
 	struct FSaveProgress
 	{
@@ -115,14 +116,15 @@ private:
 
 		FCriticalSection ProgressLock;
 	};
+
 	TSharedPtr<FSaveProgress> CurrentSaveProgress;
 	FTimerHandle ProgressUpdateTimerHandle;
-	
+
 	void UpdateSaveProgressUI();
 
 	// 启动时检查是否存在Temp或者Backup文件夹， 如果有，则进行数据恢复; 目前看起来UE似乎自己处理了相关事务，但是不知道原理=。=
 	void DataRecover();
-	
+
 	// --------- 数据保存相关 End ---------
 
 public:
@@ -130,17 +132,18 @@ public:
 	{
 		return BuildGridMapWindow;
 	}
-	
+
 	TObjectPtr<UBuildGridMapCommandManager> GetCommandManager() const
 	{
 		return CommandManager;
 	}
-	
+
 	UFUNCTION(BlueprintCallable, BlueprintPure)
-	const FGridMapSave& GetEmptyMapSave(){
+	const FGridMapSave& GetEmptyMapSave()
+	{
 		return EmptyMapSave;
 	}
-	
+
 	const FGridMapSave* GetEditingMapSave() const
 	{
 		return &EditingMapSave;
@@ -160,14 +163,14 @@ public:
 	{
 		return EditingTiles;
 	}
-	
+
 	const FSerializableTile& GetEditingTile(const FHCubeCoord& InCoord) const
 	{
 		if (EditingTiles.Contains(InCoord))
 		{
 			return EditingTiles[InCoord];
 		}
-		
+
 		return FSerializableTile::Invalid;
 	}
 
@@ -177,10 +180,20 @@ public:
 		{
 			return &EditingTiles[InCoord];
 		}
-		
+
 		return nullptr;
 	}
-	
+
+	void SetEditingTiles(const TMap<FHCubeCoord, FSerializableTile>& InTiles)
+	{
+		EditingTiles = InTiles;
+	}
+
+	void SetEditingTiles(TMap<FHCubeCoord, FSerializableTile>&& InTiles)
+	{
+		EditingTiles = MoveTemp(InTiles);
+	}
+
 	UFUNCTION(BlueprintCallable)
 	void CreateGridMapSave(FName InMapName);
 
@@ -189,16 +202,22 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable)
 	void SwitchEditingMapSave(const FGridMapSave& InMapSave);
-	
+
+	/**
+	 * 打印当前地图的命令
+	 */
+	UFUNCTION(BlueprintCallable)
+	void DebugCommandHistory();
+
 private:
 	// Map UI事件
 	UFUNCTION()
 	void OnMapNameTextCommitted(const FText& Text, ETextCommit::Type CommitMethod);
-	
+
 	void OnMapTypeSelectionChanged(EGridMapType InMapType);
 	void OnMapDrawModeSelectionChanged(EGridMapDrawMode InDrawMode);
 	void OnHexTileOrientationSelectionChanged(ETileOrientationFlag InTileOrientation);
-	
+
 	UFUNCTION()
 	void OnMapRowTextCommitted(const FText& Text, ETextCommit::Type CommitMethod);
 	UFUNCTION()
@@ -216,6 +235,8 @@ private:
 	void OnTileEnvSelectionChanged(TObjectPtr<UGridEnvironmentType> NewGridEnvironment);
 	UFUNCTION()
 	void OnEnvTextureIndexTextCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+	// UFUNCTION()
+	// void OnEnvTextureIndexTextChanged(const FText& InNewText);
 
 	// 一些合并处理的指令
 	void IntervalChangeTileSize(double InSizeX, double InSizeY);

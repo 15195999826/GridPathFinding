@@ -11,7 +11,10 @@
 #include "GridPathFindingSettings.h"
 #include "JsonObjectConverter.h"
 #include "BuildGridMap/BuildGridMapRenderer.h"
+#include "BuildGridMap/Command/BuildGridMapChangeMultiTileEnvCommand.h"
+#include "BuildGridMap/Command/BuildGridMapChangeMapColCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMapNameCommand.h"
+#include "BuildGridMap/Command/BuildGridMapChangeMapRowCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMapTypeCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeTileEnvCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeTileEnvTextureCommand.h"
@@ -25,7 +28,7 @@
 void ABuildGridMapGameMode::BeginPlay()
 {
 	DataRecover();
-	
+
 	// 遍历场景Actor查询GridMapRenderer
 	for (TActorIterator<ABuildGridMapRenderer> It(GetWorld()); It; ++It)
 	{
@@ -34,7 +37,7 @@ void ABuildGridMapGameMode::BeginPlay()
 
 	// check(BackgroundModel);
 	check(BuildGridMapRenderer);
-	
+
 	check(GridMapModel == nullptr);
 	GridMapModel = NewObject<UGridMapModel>(this, UGridMapModel::StaticClass());
 	BuildGridMapRenderer->SetModel(GridMapModel);
@@ -64,14 +67,16 @@ void ABuildGridMapGameMode::BeginPlay()
 	BuildGridMapWindow->TileConfigWidget->OnTileEnvChanged.AddUObject(this, &ABuildGridMapGameMode::OnTileEnvSelectionChanged);
 	BuildGridMapWindow->TileConfigWidget->EnvTextureIndexTextBox->OnTextCommitted.AddDynamic(this, &ABuildGridMapGameMode::OnEnvTextureIndexTextCommitted);
 
-	OnSaveStart.AddLambda([this](EBuildGridMapSaveMode InSaveMode) {
-        bIsSaving = true;
-    });
+	OnSaveStart.AddLambda([this](EBuildGridMapSaveMode InSaveMode)
+	{
+		bIsSaving = true;
+	});
 
-	OnSaveOver.AddLambda([this]() {
-        bIsSaving = false;
-    });
-	
+	OnSaveOver.AddLambda([this]()
+	{
+		bIsSaving = false;
+	});
+
 	FGGB_SaveData SaveData;
 	SaveData.Data = "Test";
 	SaveData.Transform = FTransform(FVector(1, 2, 3));
@@ -84,12 +89,12 @@ void ABuildGridMapGameMode::BeginPlay()
 	// 使用Json序列化
 	FString JsonString;
 	FJsonObjectConverter::UStructToJsonObjectString(SaveData, JsonString);
-	
+
 	// 测试二进制序列化
 	auto s = UGridPathFindingBlueprintFunctionLib::GGB_SerializeSaveData(SaveData);
 
 	// 对比二级制字符产和Json字符串， 哪个数据更短
-	
+
 	int32 JsonSize = JsonString.Len();
 	int32 BinarySize = s.Len();
 
@@ -145,9 +150,10 @@ void RunOnGameThread(TFunction<void()> Function, bool bWait = false)
 	{
 		// 使用新的API创建事件
 		FEvent* DoneEvent = FPlatformProcess::GetSynchEventFromPool();
-        
+
 		// 在游戏线程上执行
-		AsyncTask(ENamedThreads::GameThread, [Function, DoneEvent]() {
+		AsyncTask(ENamedThreads::GameThread, [Function, DoneEvent]()
+		{
 			Function();
 			DoneEvent->Trigger(); // 完成后通知等待线程
 		});
@@ -185,319 +191,320 @@ void ABuildGridMapGameMode::SaveEditingMapSave(EBuildGridMapSaveMode InSaveMode)
 	{
 		// Todo: 碰到了一次 保存完毕后，SaveState仍为Saving的情况， 暂时不知道怎么复现
 		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red,
-			TEXT("正在保存地图数据，请稍后再试"));
+		                                 TEXT("正在保存地图数据，请稍后再试"));
 		return;
 	}
-	
+
 	// FGridMapSave数据较为简单， 反复保存问题不大
 	// 序列为Json
 	IntervalMapSaveToFile(EditingMapSave);
 	OnSaveStart.Broadcast(InSaveMode);
 
-	if (GridMapModel->GetMapConfig()->DrawMode != EGridMapDrawMode::BaseOnRowColumn)
+	if (GridMapModel->GetMapConfigPtr()->DrawMode != EGridMapDrawMode::BaseOnRowColumn)
 	{
 		// Todo: 暂不支持其它格式的地图保存， 其它模式的分区功能要额外实现
 		OnSaveOver.Broadcast();
 		return;
 	}
-	
+
 	FString ChunkDir = GetChunksRootDir();
-				
+
 	// Todo: 当切换地图、更改地图的行列参数时， 地图的Chunk会发生改变， 此时需要进行一次FullSave
-	switch (InSaveMode) {
-		case EBuildGridMapSaveMode::FullSave:
+	switch (InSaveMode)
+	{
+	case EBuildGridMapSaveMode::FullSave:
+		{
+			// 改进的安全保存流程
+			// 1. 创建Temp文件夹，生成新的数据
+			// 2. 创建备份：将当前Chunks文件夹重命名为Backup
+			// 3. 将Temp文件夹重命名为正式的Chunks文件夹
+			// 4. 删除备份文件夹
+			// 5. 实现崩溃恢复：启动时检查是否存在Temp或Backup文件夹，如有则进行恢复
+			if (ProgressUpdateTimerHandle.IsValid())
 			{
-				// 改进的安全保存流程
-				// 1. 创建Temp文件夹，生成新的数据
-				// 2. 创建备份：将当前Chunks文件夹重命名为Backup
-				// 3. 将Temp文件夹重命名为正式的Chunks文件夹
-				// 4. 删除备份文件夹
-				// 5. 实现崩溃恢复：启动时检查是否存在Temp或Backup文件夹，如有则进行恢复
-				if (ProgressUpdateTimerHandle.IsValid())
-				{
-					ProgressUpdateTimerHandle.Invalidate();
-				}
-	
-				GetWorldTimerManager().SetTimer(ProgressUpdateTimerHandle, this, 
-					&ABuildGridMapGameMode::UpdateSaveProgressUI, 0.1f, true);
-
-				check(FPaths::DirectoryExists(ChunkDir));
-				const FString TempDir = ChunkDir + TEXT("_Temp");
-				const FString BackupDir = ChunkDir + TEXT("_Backup");
-				// UI出现Mask(窗口监听事件)， 并禁止其它所有键盘操作(PC监听事件)， 更新全部格子数据, 通过专门的按钮触发, 无论如何都会保存
-				IFileManager::Get().MakeDirectory(*TempDir, true);
-				// MakeChunkData
-				// 创建共享状态对象
-				struct FSaveState
-				{
-					// 保存每个区块的数据
-					TMap<int32, FGridMapTilesSave> ChunkTilesMap;
-    
-					// 当前正在处理的元素索引
-					int32 ProcessedCount = 0;
-					// 使用指针而不是迭代器
-					TMap<FHCubeCoord, FSerializableTile>* EditingTilesPtr = nullptr;
-
-					// 与主线程共享的进度对象
-					TSharedPtr<FSaveProgress> Progress;
-				};
-
-				CurrentSaveProgress = MakeShared<FSaveProgress>();
-				TSharedPtr<FSaveState> SaveStatePtr = MakeShared<FSaveState>();
-				SaveStatePtr->EditingTilesPtr = &EditingTiles; // 设置指针指向编辑中的格子
-				SaveStatePtr->Progress = CurrentSaveProgress;
-
-				Async(EAsyncExecution::TaskGraph, [this, SaveStatePtr, TempDir, BackupDir, ChunkDir]
-				{
-					const int32 BatchSize = 1000; // 每批处理量
-					const auto& EditingTiles = *(SaveStatePtr->EditingTilesPtr);
-
-					TArray<FHCubeCoord> Keys;
-					EditingTiles.GetKeys(Keys);
-
-					while (SaveStatePtr->ProcessedCount < Keys.Num())
-					{
-						float ProgressPercent = (float)SaveStatePtr->ProcessedCount / Keys.Num();
-						SaveStatePtr->Progress->Progress = ProgressPercent /0.2f; // 0-20%范围
-						SaveStatePtr->Progress->StatusMessage = FString::Printf(TEXT("格子数据分区: %d/%d"),
-							SaveStatePtr->ProcessedCount, Keys.Num());
-						SaveStatePtr->Progress->bIsDirty = true;
-						
-						// 处理一批数据
-						int32 EndIdx = FMath::Min(SaveStatePtr->ProcessedCount + BatchSize, Keys.Num());
-
-						for (int32 i = SaveStatePtr->ProcessedCount; i < EndIdx; ++i)
-						{
-							const FHCubeCoord& Coord = Keys[i];
-							const FSerializableTile& Tile = EditingTiles[Coord];
-
-							// 获取区块索引
-							int32 ChunkIndex = GridMapModel->StableGetCoordChunkIndex(Coord);
-
-							// 添加到对应区块
-							if (!SaveStatePtr->ChunkTilesMap.Contains(ChunkIndex))
-							{
-								FGridMapTilesSave NewChunkSave;
-								// Todo: 暂时未使用数据版本号。
-								NewChunkSave.Version = 1;
-								SaveStatePtr->ChunkTilesMap.Add(ChunkIndex, NewChunkSave);
-							}
-							SaveStatePtr->ChunkTilesMap[ChunkIndex].GridTiles.Add(Tile);
-						}
-
-						SaveStatePtr->ProcessedCount = EndIdx;
-						// 暂停片刻，让出CPU时间
-						FPlatformProcess::Sleep(0.001f);
-					}
-
-					if (DebugSave)
-					{
-						// 增加Sleep , 测试功能
-						FPlatformProcess::Sleep(1.f);
-					}
-					
-					// 数据分区已经完成， 序列化保存
-					SaveStatePtr->Progress->TotalTaskCount = SaveStatePtr->ChunkTilesMap.Num();
-					TArray<TFuture<void>> SaveTasks;
-					for (const auto& ChunkPair : SaveStatePtr->ChunkTilesMap)
-					{
-						const int32 ChunkIndex = ChunkPair.Key;
-						const FGridMapTilesSave& ChunkSave = ChunkPair.Value;
-
-						// 序列化数据
-						FString ChunkFilePath = TempDir / FString::Printf(TEXT("Chunk_%d.bin"), ChunkIndex);
-						
-						// 保存到Temp目录
-						SaveTasks.Add(Async(EAsyncExecution::ThreadPool, [SaveStatePtr, ChunkSave, ChunkFilePath]()
-						{
-							bool SaveSuccess = UGridPathFindingBlueprintFunctionLib::SaveGridMapTilesToFile(ChunkSave, ChunkFilePath);
-							if (!SaveSuccess)
-							{
-								UE_LOG(LogTemp, Error, TEXT("[FullSave] Failed to save tiles to file,ChunkIndex: %s"), *ChunkFilePath);
-							}
-							// 线程安全地更新进度
-							int32 Completed = SaveStatePtr->Progress->CompletedTasks.Increment();
-							int32 Total = SaveStatePtr->Progress->TotalTaskCount;
-
-							// 使用互斥锁保护对非原子类型的修改
-							FScopeLock Lock(&SaveStatePtr->Progress->ProgressLock);
-							SaveStatePtr->Progress->Progress = 0.2f + (0.7f * Completed / Total); // 20%-90%范围
-							SaveStatePtr->Progress->StatusMessage = FString::Printf(TEXT("保存临时文件: %d/%d"),
-								Completed, Total);
-							SaveStatePtr->Progress->bIsDirty = true;
-						}));
-					}
-
-					
-					if (DebugSave)
-					{
-						// 增加Sleep , 测试功能
-						FPlatformProcess::Sleep(1.f);
-					}
-
-					for (auto& Task : SaveTasks)
-					{
-						Task.Wait();
-					}
-
-					
-					if (DebugSave)
-					{
-						// 增加Sleep , 测试功能
-						FPlatformProcess::Sleep(1.f);
-					}
-					
-					// 将ChunkDir改名为BackupDir
-					IFileManager::Get().Move(*BackupDir, *ChunkDir);
-					SaveStatePtr->Progress->Progress = 0.92f;
-					SaveStatePtr->Progress->StatusMessage = TEXT("保存备份");
-					SaveStatePtr->Progress->bIsDirty = true;
-					
-					if (DebugSave)
-					{
-						// 增加Sleep , 测试功能
-						FPlatformProcess::Sleep(1.f);
-					}
-					
-					// 将TempDir改名为ChunkDir
-					IFileManager::Get().Move(*ChunkDir, *TempDir);
-					SaveStatePtr->Progress->Progress = 0.95f;
-					SaveStatePtr->Progress->StatusMessage = TEXT("保存完成");
-					SaveStatePtr->Progress->bIsDirty = true;
-					
-					if (DebugSave)
-					{
-						// 增加Sleep , 测试功能
-						FPlatformProcess::Sleep(1.f);
-					}
-
-					// 删除BackupDir
-					IFileManager::Get().DeleteDirectory(*BackupDir, false, true);
-					SaveStatePtr->Progress->Progress = 1.0f;
-					SaveStatePtr->Progress->StatusMessage = TEXT("删除备份");
-					SaveStatePtr->Progress->bIsDirty = true;
-					
-					if (DebugSave)
-					{
-						// 增加Sleep , 测试功能
-						FPlatformProcess::Sleep(1.f);
-					}
-					// 返回游戏线程完成保存
-					AsyncTask(ENamedThreads::GameThread, [this]()
-					{
-						OnSaveOver.Broadcast();
-					});
-				});
+				ProgressUpdateTimerHandle.Invalidate();
 			}
-			break;
-		case EBuildGridMapSaveMode::IncrementalSave:
+
+			GetWorldTimerManager().SetTimer(ProgressUpdateTimerHandle, this,
+			                                &ABuildGridMapGameMode::UpdateSaveProgressUI, 0.1f, true);
+
+			check(FPaths::DirectoryExists(ChunkDir));
+			const FString TempDir = ChunkDir + TEXT("_Temp");
+			const FString BackupDir = ChunkDir + TEXT("_Backup");
+			// UI出现Mask(窗口监听事件)， 并禁止其它所有键盘操作(PC监听事件)， 更新全部格子数据, 通过专门的按钮触发, 无论如何都会保存
+			IFileManager::Get().MakeDirectory(*TempDir, true);
+			// MakeChunkData
+			// 创建共享状态对象
+			struct FSaveState
 			{
-				// Ctrl + S 保存 和 经过一定间隔后进行自动保存， 使用增量保存， 只更新那些发生了数据变化的格子
-				if (DirtyChunks.Num() == 0)
+				// 保存每个区块的数据
+				TMap<int32, FGridMapTilesSave> ChunkTilesMap;
+
+				// 当前正在处理的元素索引
+				int32 ProcessedCount = 0;
+				// 使用指针而不是迭代器
+				TMap<FHCubeCoord, FSerializableTile>* EditingTilesPtr = nullptr;
+
+				// 与主线程共享的进度对象
+				TSharedPtr<FSaveProgress> Progress;
+			};
+
+			CurrentSaveProgress = MakeShared<FSaveProgress>();
+			TSharedPtr<FSaveState> SaveStatePtr = MakeShared<FSaveState>();
+			SaveStatePtr->EditingTilesPtr = &EditingTiles; // 设置指针指向编辑中的格子
+			SaveStatePtr->Progress = CurrentSaveProgress;
+
+			Async(EAsyncExecution::TaskGraph, [this, SaveStatePtr, TempDir, BackupDir, ChunkDir]
+			{
+				const int32 BatchSize = 1000; // 每批处理量
+				const auto& EditingTiles = *(SaveStatePtr->EditingTilesPtr);
+
+				TArray<FHCubeCoord> Keys;
+				EditingTiles.GetKeys(Keys);
+
+				while (SaveStatePtr->ProcessedCount < Keys.Num())
+				{
+					float ProgressPercent = (float)SaveStatePtr->ProcessedCount / Keys.Num();
+					SaveStatePtr->Progress->Progress = ProgressPercent / 0.2f; // 0-20%范围
+					SaveStatePtr->Progress->StatusMessage = FString::Printf(TEXT("格子数据分区: %d/%d"),
+					                                                        SaveStatePtr->ProcessedCount, Keys.Num());
+					SaveStatePtr->Progress->bIsDirty = true;
+
+					// 处理一批数据
+					int32 EndIdx = FMath::Min(SaveStatePtr->ProcessedCount + BatchSize, Keys.Num());
+
+					for (int32 i = SaveStatePtr->ProcessedCount; i < EndIdx; ++i)
+					{
+						const FHCubeCoord& Coord = Keys[i];
+						const FSerializableTile& Tile = EditingTiles[Coord];
+
+						// 获取区块索引
+						int32 ChunkIndex = GridMapModel->StableGetCoordChunkIndex(Coord);
+
+						// 添加到对应区块
+						if (!SaveStatePtr->ChunkTilesMap.Contains(ChunkIndex))
+						{
+							FGridMapTilesSave NewChunkSave;
+							// Todo: 暂时未使用数据版本号。
+							NewChunkSave.Version = 1;
+							SaveStatePtr->ChunkTilesMap.Add(ChunkIndex, NewChunkSave);
+						}
+						SaveStatePtr->ChunkTilesMap[ChunkIndex].GridTiles.Add(Tile);
+					}
+
+					SaveStatePtr->ProcessedCount = EndIdx;
+					// 暂停片刻，让出CPU时间
+					FPlatformProcess::Sleep(0.001f);
+				}
+
+				if (DebugSave)
+				{
+					// 增加Sleep , 测试功能
+					FPlatformProcess::Sleep(1.f);
+				}
+
+				// 数据分区已经完成， 序列化保存
+				SaveStatePtr->Progress->TotalTaskCount = SaveStatePtr->ChunkTilesMap.Num();
+				TArray<TFuture<void>> SaveTasks;
+				for (const auto& ChunkPair : SaveStatePtr->ChunkTilesMap)
+				{
+					const int32 ChunkIndex = ChunkPair.Key;
+					const FGridMapTilesSave& ChunkSave = ChunkPair.Value;
+
+					// 序列化数据
+					FString ChunkFilePath = TempDir / FString::Printf(TEXT("Chunk_%d.bin"), ChunkIndex);
+
+					// 保存到Temp目录
+					SaveTasks.Add(Async(EAsyncExecution::ThreadPool, [SaveStatePtr, ChunkSave, ChunkFilePath]()
+					{
+						bool SaveSuccess = UGridPathFindingBlueprintFunctionLib::SaveGridMapTilesToFile(ChunkSave, ChunkFilePath);
+						if (!SaveSuccess)
+						{
+							UE_LOG(LogTemp, Error, TEXT("[FullSave] Failed to save tiles to file,ChunkIndex: %s"), *ChunkFilePath);
+						}
+						// 线程安全地更新进度
+						int32 Completed = SaveStatePtr->Progress->CompletedTasks.Increment();
+						int32 Total = SaveStatePtr->Progress->TotalTaskCount;
+
+						// 使用互斥锁保护对非原子类型的修改
+						FScopeLock Lock(&SaveStatePtr->Progress->ProgressLock);
+						SaveStatePtr->Progress->Progress = 0.2f + (0.7f * Completed / Total); // 20%-90%范围
+						SaveStatePtr->Progress->StatusMessage = FString::Printf(TEXT("保存临时文件: %d/%d"),
+						                                                        Completed, Total);
+						SaveStatePtr->Progress->bIsDirty = true;
+					}));
+				}
+
+
+				if (DebugSave)
+				{
+					// 增加Sleep , 测试功能
+					FPlatformProcess::Sleep(1.f);
+				}
+
+				for (auto& Task : SaveTasks)
+				{
+					Task.Wait();
+				}
+
+
+				if (DebugSave)
+				{
+					// 增加Sleep , 测试功能
+					FPlatformProcess::Sleep(1.f);
+				}
+
+				// 将ChunkDir改名为BackupDir
+				IFileManager::Get().Move(*BackupDir, *ChunkDir);
+				SaveStatePtr->Progress->Progress = 0.92f;
+				SaveStatePtr->Progress->StatusMessage = TEXT("保存备份");
+				SaveStatePtr->Progress->bIsDirty = true;
+
+				if (DebugSave)
+				{
+					// 增加Sleep , 测试功能
+					FPlatformProcess::Sleep(1.f);
+				}
+
+				// 将TempDir改名为ChunkDir
+				IFileManager::Get().Move(*ChunkDir, *TempDir);
+				SaveStatePtr->Progress->Progress = 0.95f;
+				SaveStatePtr->Progress->StatusMessage = TEXT("保存完成");
+				SaveStatePtr->Progress->bIsDirty = true;
+
+				if (DebugSave)
+				{
+					// 增加Sleep , 测试功能
+					FPlatformProcess::Sleep(1.f);
+				}
+
+				// 删除BackupDir
+				IFileManager::Get().DeleteDirectory(*BackupDir, false, true);
+				SaveStatePtr->Progress->Progress = 1.0f;
+				SaveStatePtr->Progress->StatusMessage = TEXT("删除备份");
+				SaveStatePtr->Progress->bIsDirty = true;
+
+				if (DebugSave)
+				{
+					// 增加Sleep , 测试功能
+					FPlatformProcess::Sleep(1.f);
+				}
+				// 返回游戏线程完成保存
+				AsyncTask(ENamedThreads::GameThread, [this]()
 				{
 					OnSaveOver.Broadcast();
-					return;
+				});
+			});
+		}
+		break;
+	case EBuildGridMapSaveMode::IncrementalSave:
+		{
+			// Ctrl + S 保存 和 经过一定间隔后进行自动保存， 使用增量保存， 只更新那些发生了数据变化的格子
+			if (DirtyChunks.Num() == 0)
+			{
+				OnSaveOver.Broadcast();
+				return;
+			}
+
+			// 只重新DirtyCoords中的格子
+			// 流程:
+			// 1. 创建Temp文件夹，和 Backup文件夹
+			// 2. 将需要更新的Chunk数据保存到Temp文件夹中 
+			// 3. 将需要替换的Chunk数据移动到Backup文件夹中
+			// 4. 将Temp文件夹中的数据移动到Chunk文件夹中
+			// 5. 删除Temp文件夹和Backup文件夹
+
+			auto DirtyChunksCopy = DirtyChunks;
+			DirtyChunks.Empty();
+			Async(EAsyncExecution::TaskGraph, [this, DirtyChunksCopy, ChunkDir]
+			{
+				FString TempDir = ChunkDir + TEXT("/Temp");
+				FString BackupDir = ChunkDir + TEXT("/Backup");
+
+				// 创建临时文件夹
+				IFileManager::Get().MakeDirectory(*TempDir);
+				IFileManager::Get().MakeDirectory(*BackupDir);
+
+				TArray<TFuture<void>> SaveTasks;
+				for (int32 ChunkIndex : DirtyChunksCopy)
+				{
+					FString ChunkFileName = FString::Printf(TEXT("Chunk_%d.bin"), ChunkIndex);
+					FString TempFile = TempDir / ChunkFileName;
+					// 创建区块数据
+					FGridMapTilesSave ChunkSave;
+					// 不去保护Save过程中又更新了格子数据的情况， 直接去拿当前的Tile数据
+					// 线程安全地获取需要保存的数据
+					RunOnGameThread([this, ChunkIndex, &ChunkSave]()
+					{
+						// 在游戏线程中收集属于该区块的所有格子数据
+						TArray<FHCubeCoord> InChunkCoords;
+						GridMapModel->StableGetChunkCoords(ChunkIndex, InChunkCoords);
+						for (const auto& Coord : InChunkCoords)
+						{
+							auto Tile = EditingTiles.Find(Coord);
+							if (Tile)
+							{
+								ChunkSave.GridTiles.Add(*Tile);
+							}
+						}
+					}, true); // 同步等待
+
+					// 保存到Temp目录
+					SaveTasks.Add(Async(EAsyncExecution::ThreadPool, [ChunkSave, TempFile]()
+					{
+						bool SaveSuccess = UGridPathFindingBlueprintFunctionLib::SaveGridMapTilesToFile(ChunkSave, TempFile);
+						if (!SaveSuccess)
+						{
+							UE_LOG(LogGridPathFinding, Error, TEXT("[FullSave] Failed to save tiles to file,ChunkIndex: %s"), *TempFile);
+						}
+					}));
 				}
 
-				// 只重新DirtyCoords中的格子
-				// 流程:
-				// 1. 创建Temp文件夹，和 Backup文件夹
-				// 2. 将需要更新的Chunk数据保存到Temp文件夹中 
-				// 3. 将需要替换的Chunk数据移动到Backup文件夹中
-				// 4. 将Temp文件夹中的数据移动到Chunk文件夹中
-				// 5. 删除Temp文件夹和Backup文件夹
-
-				auto DirtyChunksCopy = DirtyChunks;
-				DirtyChunks.Empty();
-				Async(EAsyncExecution::TaskGraph, [this, DirtyChunksCopy, ChunkDir]
+				for (auto& Task : SaveTasks)
 				{
-					FString TempDir = ChunkDir + TEXT("/Temp");
-					FString BackupDir = ChunkDir + TEXT("/Backup");
+					Task.Wait();
+				}
 
-					// 创建临时文件夹
-					IFileManager::Get().MakeDirectory(*TempDir);
-					IFileManager::Get().MakeDirectory(*BackupDir);
-
-					TArray<TFuture<void>> SaveTasks;
-					for (int32 ChunkIndex : DirtyChunksCopy)
+				// 将需要替换的Chunk数据移动到Backup文件夹中
+				for (int32 ChunkIndex : DirtyChunksCopy)
+				{
+					FString ChunkFileName = FString::Printf(TEXT("Chunk_%d.bin"), ChunkIndex);
+					FString ChunkFilePath = ChunkDir / ChunkFileName;
+					// 检查是否存在Chunk文件
+					if (!FPaths::FileExists(ChunkFilePath))
 					{
-						FString ChunkFileName = FString::Printf(TEXT("Chunk_%d.bin"), ChunkIndex);
-						FString TempFile = TempDir / ChunkFileName;
-						// 创建区块数据
-						FGridMapTilesSave ChunkSave;
-						// 不去保护Save过程中又更新了格子数据的情况， 直接去拿当前的Tile数据
-						// 线程安全地获取需要保存的数据
-						RunOnGameThread([this, ChunkIndex, &ChunkSave]()
-						{
-							// 在游戏线程中收集属于该区块的所有格子数据
-							TArray<FHCubeCoord> InChunkCoords;
-							GridMapModel->StableGetChunkCoords(ChunkIndex, InChunkCoords);
-							for (const auto& Coord : InChunkCoords)
-							{
-								auto Tile = EditingTiles.Find(Coord);
-								if (Tile)
-								{
-									ChunkSave.GridTiles.Add(*Tile);
-								}
-							}
-						}, true); // 同步等待
-
-						// 保存到Temp目录
-						SaveTasks.Add(Async(EAsyncExecution::ThreadPool, [ChunkSave, TempFile]()
-						{
-							bool SaveSuccess = UGridPathFindingBlueprintFunctionLib::SaveGridMapTilesToFile(ChunkSave, TempFile);
-							if (!SaveSuccess)
-							{
-								UE_LOG(LogGridPathFinding, Error, TEXT("[FullSave] Failed to save tiles to file,ChunkIndex: %s"), *TempFile);
-							}
-						}));
+						UE_LOG(LogGridPathFinding, Warning, TEXT("Chunk文件不存在: %s"), *ChunkFilePath);
+						continue;
 					}
+					FString BackupFile = BackupDir / ChunkFileName;
+					IFileManager::Get().Move(*BackupFile, *ChunkFilePath);
+				}
 
-					for (auto& Task : SaveTasks)
-					{
-						Task.Wait();
-					}
+				// 将Temp文件夹中的数据移动到Chunk文件夹中
+				TArray<FString> TempFiles;
+				IFileManager::Get().FindFiles(TempFiles, *TempDir, TEXT("*.bin"));
+				for (const auto& TempFile : TempFiles)
+				{
+					FString TempFilePath = TempDir / TempFile;
+					FString ChunkFilePath = ChunkDir / TempFile;
+					IFileManager::Get().Move(*ChunkFilePath, *TempFilePath);
+				}
 
-					// 将需要替换的Chunk数据移动到Backup文件夹中
-					for (int32 ChunkIndex : DirtyChunksCopy)
-					{
-						FString ChunkFileName = FString::Printf(TEXT("Chunk_%d.bin"), ChunkIndex);
-						FString ChunkFilePath = ChunkDir / ChunkFileName;
-						// 检查是否存在Chunk文件
-						if (!FPaths::FileExists(ChunkFilePath))
-						{
-							UE_LOG(LogGridPathFinding, Warning, TEXT("Chunk文件不存在: %s"), *ChunkFilePath);
-							continue;
-						}
-						FString BackupFile = BackupDir / ChunkFileName;
-						IFileManager::Get().Move(*BackupFile, *ChunkFilePath);
-					}
+				// 删除Temp文件夹和Backup文件夹
+				IFileManager::Get().DeleteDirectory(*TempDir, false, true);
+				IFileManager::Get().DeleteDirectory(*BackupDir, false, true);
 
-					// 将Temp文件夹中的数据移动到Chunk文件夹中
-					TArray<FString> TempFiles;
-					IFileManager::Get().FindFiles(TempFiles, *TempDir, TEXT("*.bin"));
-					for (const auto& TempFile : TempFiles)
-					{
-						FString TempFilePath = TempDir / TempFile;
-						FString ChunkFilePath = ChunkDir / TempFile;
-						IFileManager::Get().Move(*ChunkFilePath, *TempFilePath);
-					}
-
-					// 删除Temp文件夹和Backup文件夹
-					IFileManager::Get().DeleteDirectory(*TempDir, false, true);
-					IFileManager::Get().DeleteDirectory(*BackupDir, false, true);
-
-					// 返回游戏线程完成保存
-					AsyncTask(ENamedThreads::GameThread, [this]()
-					{
-						OnSaveOver.Broadcast();
-					});
+				// 返回游戏线程完成保存
+				AsyncTask(ENamedThreads::GameThread, [this]()
+				{
+					OnSaveOver.Broadcast();
 				});
-			}
-			break;
-		default:
-			UE_LOG(LogTemp, Error, TEXT("未处理的保存模式: %s"), *UEnum::GetValueAsString(InSaveMode));
-			break;
+			});
+		}
+		break;
+	default:
+		UE_LOG(LogTemp, Error, TEXT("未处理的保存模式: %s"), *UEnum::GetValueAsString(InSaveMode));
+		break;
 	}
 }
 
@@ -505,10 +512,10 @@ void ABuildGridMapGameMode::UpdateSaveProgressUI()
 {
 	if (!CurrentSaveProgress || !CurrentSaveProgress->bIsDirty)
 		return;
-	
+
 	OnSaveProgressUpdated.Broadcast(CurrentSaveProgress->Progress, CurrentSaveProgress->StatusMessage);
 	CurrentSaveProgress->bIsDirty = false;
-    
+
 	// 当保存完成时停止定时器
 	if (!bIsSaving)
 	{
@@ -561,9 +568,9 @@ void ABuildGridMapGameMode::CreateGridMapSave(FName InMapName)
 
 	check(!FPaths::DirectoryExists(ChunkDir));
 	IFileManager::Get().MakeDirectory(*ChunkDir, true);
-	
+
 	IntervalMapSaveToFile(NewMapSave);
-	
+
 	OnCreateGridMapSave.Broadcast();
 }
 
@@ -571,14 +578,14 @@ void ABuildGridMapGameMode::SwitchEditingMapSave(const FGridMapSave& InMapSave)
 {
 	// 切换地图后，清除命令历史
 	CommandManager->ClearCommandHistory();
-	
+
 	if (HasValidMapSave)
 	{
 		// 移除当前地图内容
 		EditingTiles.Empty();
 		DirtyChunks.Empty();
 	}
-	
+
 	EditingMapSave = InMapSave;
 	HasValidMapSave = EditingMapSave.MapName != TEXT("SP_Empty");
 
@@ -586,7 +593,7 @@ void ABuildGridMapGameMode::SwitchEditingMapSave(const FGridMapSave& InMapSave)
 	{
 		GridMapModel->BuildTilesData(EditingMapSave.MapConfig, EditingTiles);
 		BuildGridMapRenderer->ClearGridMap();
-		
+
 		OnSwitchEditingMapSave.Broadcast();
 		return;
 	}
@@ -621,12 +628,23 @@ void ABuildGridMapGameMode::SwitchEditingMapSave(const FGridMapSave& InMapSave)
 			}
 		}
 	}
-	
+
 	// 加载正在编辑的地图
 	GridMapModel->BuildTilesData(EditingMapSave.MapConfig, EditingTiles);
 	BuildGridMapRenderer->RenderGridMap();
-	
+
 	OnSwitchEditingMapSave.Broadcast();
+}
+
+void ABuildGridMapGameMode::DebugCommandHistory()
+{
+	FString info = CommandManager->GetHistoryCommandInfo();
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, info);
+	}
+	UE_LOG(LogGridPathFinding, Log, TEXT("[ABuildGridMapGameMode.DebugCommandHistory] %s"), *info);
 }
 
 void ABuildGridMapGameMode::OnMapNameTextCommitted(const FText& Text, ETextCommit::Type CommitMethod)
@@ -635,19 +653,20 @@ void ABuildGridMapGameMode::OnMapNameTextCommitted(const FText& Text, ETextCommi
 	{
 		return;
 	}
-	
-	switch (CommitMethod) {
-		case ETextCommit::OnEnter:
-		case ETextCommit::OnUserMovedFocus:
-			{
-				auto NewName = FName(*Text.ToString());
-				auto ChangeMapNameCommand = NewObject<UBuildGridMapChangeMapNameCommand>(CommandManager);
-				ChangeMapNameCommand->Initialize(EditingMapSave.MapName, NewName);
-				CommandManager->ExecuteCommand(ChangeMapNameCommand);
-			}
+
+	switch (CommitMethod)
+	{
+	case ETextCommit::OnEnter:
+	case ETextCommit::OnUserMovedFocus:
+		{
+			auto NewName = FName(*Text.ToString());
+			auto ChangeMapNameCommand = NewObject<UBuildGridMapChangeMapNameCommand>(CommandManager);
+			ChangeMapNameCommand->Initialize(EditingMapSave.MapName, NewName);
+			CommandManager->ExecuteCommand(ChangeMapNameCommand);
+		}
 		break;
-		default:
-			break;
+	default:
+		break;
 	}
 }
 
@@ -657,7 +676,7 @@ void ABuildGridMapGameMode::OnMapTypeSelectionChanged(EGridMapType InMapType)
 	{
 		return;
 	}
-	
+
 	auto ChangeMapTypeCommand = NewObject<UBuildGridMapChangeMapTypeCommand>(CommandManager);
 	ChangeMapTypeCommand->Initialize(EditingMapSave.MapConfig.MapType, InMapType);
 	CommandManager->ExecuteCommand(ChangeMapTypeCommand);
@@ -673,11 +692,64 @@ void ABuildGridMapGameMode::OnHexTileOrientationSelectionChanged(ETileOrientatio
 
 void ABuildGridMapGameMode::OnMapRowTextCommitted(const FText& Text, ETextCommit::Type CommitMethod)
 {
+	if (!HasValidMapSave)
+	{
+		return;
+	}
+	switch (CommitMethod)
+	{
+	case ETextCommit::OnEnter:
+	case ETextCommit::OnUserMovedFocus:
+		{
+			auto OldValue = GridMapModel->GetMapConfigPtr()->MapSize.X;
+			int32 NewValue = FCString::Atoi(*Text.ToString());
+			UE_LOG(LogGridPathFinding, Log, TEXT("old:%d new:%d"), OldValue, NewValue);
+
+			// check valid
+			if (OldValue == NewValue)
+			{
+				UE_LOG(LogGridPathFinding, Log, TEXT("新值没有变化，返回"));
+				break;
+			}
+
+			auto Command = NewObject<UBuildGridMapChangeMapRowCommand>(CommandManager);
+			Command->Initialize(OldValue, NewValue);
+			CommandManager->ExecuteCommand(Command);
+		}
+		break;
+	default: break;;
+	}
 }
 
 void ABuildGridMapGameMode::OnMapColumnTextCommitted(const FText& Text, ETextCommit::Type CommitMethod)
 {
-	// Todo: 修改地图尺寸时， 需要裁剪EditingTiles中的数据, 剔除那些超出范围的格子
+	if (!HasValidMapSave)
+	{
+		return;
+	}
+	switch (CommitMethod)
+	{
+	case ETextCommit::OnEnter:
+	case ETextCommit::OnUserMovedFocus:
+		{
+			auto OldValue = GridMapModel->GetMapConfigPtr()->MapSize.Y;
+			int32 NewValue = FCString::Atoi(*Text.ToString());
+			UE_LOG(LogGridPathFinding, Log, TEXT("old:%d new:%d"), OldValue, NewValue);
+
+			// check valid
+			if (OldValue == NewValue)
+			{
+				UE_LOG(LogGridPathFinding, Log, TEXT("新值没有变化，返回"));
+				break;
+			}
+
+			auto Command = NewObject<UBuildGridMapChangeMapColCommand>(CommandManager);
+			Command->Initialize(OldValue, NewValue);
+			CommandManager->ExecuteCommand(Command);
+		}
+		break;
+	default: break;;
+	}
 }
 
 void ABuildGridMapGameMode::OnMapRadiusTextCommitted(const FText& Text, ETextCommit::Type CommitMethod)
@@ -689,16 +761,16 @@ void ABuildGridMapGameMode::OnGridSizeXTextCommitted(const FText& Text, ETextCom
 {
 	switch (CommitMethod)
 	{
-		case ETextCommit::OnEnter:
-		case ETextCommit::OnUserMovedFocus:
-			{
-				auto NewSizeX = FCString::Atod(*Text.ToString());
-				auto SizeY = EditingMapSave.MapConfig.GetGridSize().Y;
-				IntervalChangeTileSize(NewSizeX, SizeY);
-			}
+	case ETextCommit::OnEnter:
+	case ETextCommit::OnUserMovedFocus:
+		{
+			auto NewSizeX = FCString::Atod(*Text.ToString());
+			auto SizeY = EditingMapSave.MapConfig.GetGridSize().Y;
+			IntervalChangeTileSize(NewSizeX, SizeY);
+		}
 		break;
-		default:
-			break;
+	default:
+		break;
 	}
 }
 
@@ -706,16 +778,16 @@ void ABuildGridMapGameMode::OnGridSizeYTextCommitted(const FText& Text, ETextCom
 {
 	switch (CommitMethod)
 	{
-		case ETextCommit::OnEnter:
-		case ETextCommit::OnUserMovedFocus:
-			{
-				auto NewSizeY = FCString::Atod(*Text.ToString());
-				auto SizeX = EditingMapSave.MapConfig.GetGridSize().X;
-				IntervalChangeTileSize(SizeX, NewSizeY);
-			}
+	case ETextCommit::OnEnter:
+	case ETextCommit::OnUserMovedFocus:
+		{
+			auto NewSizeY = FCString::Atod(*Text.ToString());
+			auto SizeX = EditingMapSave.MapConfig.GetGridSize().X;
+			IntervalChangeTileSize(SizeX, NewSizeY);
+		}
 		break;
-		default:
-			break;
+	default:
+		break;
 	}
 }
 
@@ -723,53 +795,77 @@ void ABuildGridMapGameMode::OnGridRadiusTextCommitted(const FText& Text, ETextCo
 {
 	switch (CommitMethod)
 	{
-		case ETextCommit::OnEnter:
-		case ETextCommit::OnUserMovedFocus:
-			{
-				auto NewRadius = FCString::Atod(*Text.ToString());
-				IntervalChangeTileSize(NewRadius, NewRadius);
-			}
+	case ETextCommit::OnEnter:
+	case ETextCommit::OnUserMovedFocus:
+		{
+			auto NewRadius = FCString::Atod(*Text.ToString());
+			IntervalChangeTileSize(NewRadius, NewRadius);
+		}
 		break;
-		default:
-			break;
+	default:
+		break;
 	}
 }
 
 void ABuildGridMapGameMode::OnTileEnvSelectionChanged(TObjectPtr<UGridEnvironmentType> NewGridEnvironment)
 {
-	auto SelectedCoord = GetSelectedCoord();
-	auto ChangeEnvCommand = NewObject<UBuildGridMapChangeTileEnvCommand>(CommandManager);
-	bool bHasSelected = EditingTiles.Contains(SelectedCoord);
-	FName OldEnvTypeID = bHasSelected ? EditingTiles[SelectedCoord].EnvironmentType : UGridEnvironmentType::EmptyEnvTypeID;
-	FName NewEnvTypeID = NewGridEnvironment == nullptr? UGridEnvironmentType::EmptyEnvTypeID : NewGridEnvironment->TypeID;
-	ChangeEnvCommand->Initialize(SelectedCoord, !bHasSelected, OldEnvTypeID, NewEnvTypeID);
-	CommandManager->ExecuteCommand(ChangeEnvCommand);
+	UE_LOG(LogGridPathFinding, Warning, TEXT("[ABuildGridMapGameMode.OnTileEnvSelectionChanged]"));
+	auto PC = Cast<ABuildGridMapPlayerController>(GetWorld()->GetFirstPlayerController());
+	if (!PC)
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTileEnvSelectionChanged] PC Invalid!"));
+		return;
+	}
+
+	TArray<FHCubeCoord> SelectedCoords = PC->SelectionComponent->GetSelectedTilesCopy();
+	if (SelectedCoords.IsEmpty())
+	{
+		UE_LOG(LogGridPathFinding, Log, TEXT("[ABuildGridMapGameMode.OnTileEnvSelectionChanged] No selected tiles!"));
+		return;
+	}
+
+	// 改变多个格子环境类型的命令
+	FName NewEnvTypeID = NewGridEnvironment == nullptr ? UGridEnvironmentType::EmptyEnvTypeID : NewGridEnvironment->TypeID;
+	auto Command = NewObject<UBuildGridMapChangeMultiTileEnvCommand>(CommandManager);
+	Command->Initialize(MoveTemp(SelectedCoords), NewEnvTypeID);
+	CommandManager->ExecuteCommand(Command);
 }
 
 void ABuildGridMapGameMode::OnEnvTextureIndexTextCommitted(const FText& Text, ETextCommit::Type CommitMethod)
 {
-	switch (CommitMethod) {
-		case ETextCommit::OnEnter:
-		case ETextCommit::OnUserMovedFocus:
-			{
-				// Todo: 目前只考虑了选中一个格子的情况， 增加多选情况需要调整代码
-				auto SelectedCoord = GetSelectedCoord();
-				
-				if (!EditingTiles.Contains(SelectedCoord))
-				{
-					UE_LOG(LogGridPathFinding, Error, TEXT("[%s]空地块不支持修改纹理索引"), *SelectedCoord.ToString());
-					return;
-				}
-				
-				auto ChangeTextureIndexCommand = NewObject<UBuildGridMapChangeTileEnvTextureCommand>(CommandManager);
-				ChangeTextureIndexCommand->Initialize(SelectedCoord,
-				                                      EditingTiles[SelectedCoord].TileEnvData.TextureIndex,
-				                                      FCString::Atoi(*Text.ToString()));
-				CommandManager->ExecuteCommand(ChangeTextureIndexCommand);
-			}
-			break;
-		default:
-			break;
+	// switch (CommitMethod)
+	// {
+	// case ETextCommit::OnEnter:
+	// case ETextCommit::OnUserMovedFocus:
+	// 	{
+	// 		// Todo: 目前只考虑了选中一个格子的情况， 增加多选情况需要调整代码
+	// 		auto SelectedCoord = GetSelectedCoord();
+	//
+	// 		if (!EditingTiles.Contains(SelectedCoord))
+	// 		{
+	// 			UE_LOG(LogGridPathFinding, Error, TEXT("[%s]空地块不支持修改纹理索引"), *SelectedCoord.ToString());
+	// 			return;
+	// 		}
+	//
+	// 		auto ChangeTextureIndexCommand = NewObject<UBuildGridMapChangeTileEnvTextureCommand>(CommandManager);
+	// 		ChangeTextureIndexCommand->Initialize(SelectedCoord,
+	// 		                                      EditingTiles[SelectedCoord].TileEnvData.TextureIndex,
+	// 		                                      FCString::Atoi(*Text.ToString()));
+	// 		CommandManager->ExecuteCommand(ChangeTextureIndexCommand);
+	// 	}
+	// 	break;
+	// default:
+	// 	break;
+	// }
+
+	switch (CommitMethod)
+	{
+	case ETextCommit::OnEnter:
+	case ETextCommit::OnUserMovedFocus:
+		UE_LOG(LogGridPathFinding, Warning, TEXT("TODO: Impl ABuildGridMapGameMode.OnEnvTextureIndexTextCommitted"));
+		break;
+	default:
+		break;
 	}
 }
 
@@ -783,8 +879,7 @@ void ABuildGridMapGameMode::IntervalChangeTileSize(double InSizeX, double InSize
 
 FHCubeCoord ABuildGridMapGameMode::GetSelectedCoord()
 {
-	return CastChecked<ABuildGridMapPlayerController>(GetWorld()->GetFirstPlayerController())->
-		GetFirstSelectedCoord();
+	return CastChecked<ABuildGridMapPlayerController>(GetWorld()->GetFirstPlayerController())->GetFirstSelectedCoord();
 }
 
 FString ABuildGridMapGameMode::GetChunksRootDir()

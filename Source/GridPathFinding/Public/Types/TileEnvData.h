@@ -17,4 +17,14 @@ struct FTileEnvData
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 TextureIndex;
+
+	friend bool operator==(const FTileEnvData& lhs, const FTileEnvData& rhs)
+	{
+		return lhs.TextureIndex == rhs.TextureIndex;
+	}
+
+	friend bool operator!=(const FTileEnvData& lhs, const FTileEnvData& rhs)
+	{
+		return !(lhs == rhs);
+	}
 };
