@@ -47,6 +47,10 @@ protected:
 	UPROPERTY()
 	TArray<FTileInfo> Tiles;
 
+	// 记录格子上的Actor, 寻路系统会使用该数据来判断格子是否被占用
+	UPROPERTY()
+	TMap<FHCubeCoord, TWeakObjectPtr<AActor>> StandingActors;
+
 	// 用于寻路时快速查询Tile数据
 	UPROPERTY()
 	TMap<FHCubeCoord, int32> TileCoordToIndexMap;
@@ -106,6 +110,21 @@ public:
 		}
 
 		return nullptr;
+	}
+
+
+	void UpdateStandingActor(const FHCubeCoord& OldCoord, const FHCubeCoord& NewCoord, AActor* InActor);
+
+	bool TryGetStandingActor(const FHCubeCoord& Coord, AActor*& OutActor) const
+	{
+		if (StandingActors.Contains(Coord))
+		{
+			OutActor = StandingActors[Coord].Get();
+			return OutActor != nullptr;
+		}
+
+		OutActor = nullptr;
+		return false;
 	}
 
 protected:

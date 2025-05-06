@@ -33,15 +33,7 @@ struct FTileInfo
 	//  ---- 寻路格子占用数据 Start----
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
 	bool HasAIBooked{false};
-
-	// 只存Stand在当前Tile上的AI
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
-	TWeakObjectPtr<AActor> StandingActor;
-
-	bool HasActor() const
-	{
-		return StandingActor.IsValid();
-	}
+	
 	//  ----- 寻路格子占用数据 End----
 
 	friend bool operator==(const FTileInfo &A, const FTileInfo &B)

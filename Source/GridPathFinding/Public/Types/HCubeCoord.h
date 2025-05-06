@@ -8,7 +8,7 @@
  * @see https://www.redblobgames.com/grids/hexagons/implementation.html#hex
  */
 USTRUCT(BlueprintType)
-struct FHCubeCoord
+struct GRIDPATHFINDING_API FHCubeCoord
 {
 	GENERATED_USTRUCT_BODY()
 	

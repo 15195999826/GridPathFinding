@@ -167,6 +167,23 @@ void UGridMapModel::ModifyTilesData(EGridMapModelTileModifyType ModifyType, cons
 	}
 }
 
+void UGridMapModel::UpdateStandingActor(const FHCubeCoord& OldCoord, const FHCubeCoord& NewCoord, AActor* InActor)
+{
+	if (OldCoord != FHCubeCoord::Invalid)
+	{
+		check(StandingActors.Contains(OldCoord));
+		check(StandingActors[OldCoord] == InActor);
+		StandingActors.Remove(OldCoord);
+	}
+
+	if (NewCoord == FHCubeCoord::Invalid)
+	{
+		return;
+	}
+
+	StandingActors.Add(NewCoord, InActor);
+}
+
 // 异步任务类的实现
 UGridMapModel::FBuildTilesDataTask::FBuildTilesDataTask(UGridMapModel* InOwner,
                                                         const TMap<FHCubeCoord, FSerializableTile>& InTilesData,
