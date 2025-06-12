@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GridEnvironmentType.h"
 #include "HCubeCoord.h"
+#include "SerializableTokenData.h"
 #include "TileEnvData.h"
 #include "SerializableTile.generated.h"
 
@@ -14,7 +15,6 @@ struct FSerializableTile
 
 	FSerializableTile()
 	{
-		EnvironmentType = UGridEnvironmentType::EmptyEnvTypeID;
 	}
 
 	static const FSerializableTile Invalid;
@@ -25,12 +25,12 @@ struct FSerializableTile
 
 	UPROPERTY()
 	float Height = 1;
-
-	UPROPERTY()
-	FName EnvironmentType;
-
+	
 	UPROPERTY()
 	FTileEnvData TileEnvData;
+
+	UPROPERTY()
+	TArray<FSerializableTokenData> SerializableTokens; 
 
 	UPROPERTY()
 	FString CustomGameplayData;
@@ -39,9 +39,10 @@ struct FSerializableTile
 	{
 		return /*lhs.Coord == rhs.Coord &&*/
 			FMath::IsNearlyEqual(lhs.Height, rhs.Height) &&
-			lhs.EnvironmentType == rhs.EnvironmentType &&
 			lhs.TileEnvData == rhs.TileEnvData &&
 			lhs.CustomGameplayData == rhs.CustomGameplayData;
+
+		//Todo: 检查SerializableTokens是否相同
 	}
 
 	friend bool operator!=(const FSerializableTile& lhs, const FSerializableTile& rhs)

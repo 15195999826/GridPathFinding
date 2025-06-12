@@ -50,4 +50,15 @@ public:
 		
 		return CommandManager->RedoCommand();
 	}
+
+	static float GetCursorSize(const FGridMapConfig& InConfig)
+	{
+		switch (InConfig.MapType)
+		{
+			case EGridMapType::HEX_STANDARD:
+				return InConfig.HexGridRadius / 100.f; // 六边形光标大小
+			default:
+				return 1.f; // 默认光标大小
+		}
+	}
 };

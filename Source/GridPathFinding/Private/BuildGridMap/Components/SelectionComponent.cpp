@@ -75,7 +75,7 @@ void USelectionComponent::EndSelection(const FVector& HitGroundLocation)
 		// 单选
 		if (SelectionStartPos == SelectionCurrentPos)
 		{
-			auto OneTile = MyGameMode->GridMapModel->StableWorldToCoord(HitGroundLocation);
+			FHCubeCoord OneTile = MyGameMode->GridMapModel->StableWorldToCoord(HitGroundLocation);
 			if (MyGameMode->GridMapModel->IsCoordInMapArea(OneTile))
 			{
 				TArray<FHCubeCoord> NewSelectedTiles;
@@ -87,7 +87,7 @@ void USelectionComponent::EndSelection(const FVector& HitGroundLocation)
 					NewSelectedTiles = SelectedTiles;
 
 					// 检查是否已经选中了这个格子
-					int32 ExistingIndex = NewSelectedTiles.Find(OneTile);
+					const int32 ExistingIndex = NewSelectedTiles.Find(OneTile);
 					if (ExistingIndex != INDEX_NONE)
 					{
 						// 如果已经选中，则移除
@@ -124,7 +124,7 @@ void USelectionComponent::EndSelection(const FVector& HitGroundLocation)
 		}
 		else //多选
 		{
-			auto BoxSelectedTiles = GetGridCellsInSelectionBox();
+			TArray<FHCubeCoord> BoxSelectedTiles = GetGridCellsInSelectionBox();
 			if (BoxSelectedTiles.Num() > 0)
 			{
 				TArray<FHCubeCoord> NewSelectedTiles;
@@ -238,6 +238,7 @@ TArray<FHCubeCoord> USelectionComponent::GetGridCellsInSelectionBox()
 
 	auto MyGameMode = GetWorld()->GetAuthGameMode<ABuildGridMapGameMode>();
 	auto EditingMapSave = MyGameMode->GetMutEditingMapSave();
+	const TMap<FHCubeCoord, FSerializableTile>& EditingTiles = MyGameMode->GetEditingTiles();
 
 	// 计算选择框的屏幕范围
 	float Left = FMath::Min(SelectionStartPos.X, SelectionCurrentPos.X);
@@ -246,7 +247,6 @@ TArray<FHCubeCoord> USelectionComponent::GetGridCellsInSelectionBox()
 	float Bottom = FMath::Max(SelectionStartPos.Y, SelectionCurrentPos.Y);
 
 	// 遍历所有格子 TODO: 优化为按区域遍历
-	// 检查每个格子是否在选择框内
 	UGridPathFindingBlueprintFunctionLib::StableForEachMapGrid(EditingMapSave->MapConfig, [&](const FHCubeCoord& Coord, int32 Row, int32 Col)
 	{
 		// UE_LOG(LogGridPathFinding, Log, TEXT("[USelectionComponent.GetGridCellsInSelectionBox] Row: %d, Col: %d"), Row, Col);
@@ -259,10 +259,38 @@ TArray<FHCubeCoord> USelectionComponent::GetGridCellsInSelectionBox()
 		{
 			// UE_LOG(LogGridPathFinding, Log, TEXT("[USelectionComponent.GetGridCellsInSelectionBox] ScreenPos: %s"), *TileScreenPos.ToString());
 
+			// 检查每个格子是否在选择框内
 			if (TileScreenPos.X >= Left && TileScreenPos.X <= Right && TileScreenPos.Y >= Top && TileScreenPos.Y <= Bottom)
 			{
 				// UE_LOG(LogGridPathFinding, Log, TEXT("[USelectionComponent.GetGridCellsInSelectionBox] Row: %d, Col: %d"), Row, Col);
-				Result.Add(Coord);
+
+				// 根据不同的筛选条件进行处理
+				bool needFilter = PC->SelectFilterType != ESelectFilterType::None;
+				if (!needFilter)
+				{
+					Result.Add(Coord);
+				}
+				else
+				{
+					switch (PC->SelectFilterType)
+					{
+					case ESelectFilterType::Tile:
+						if (!EditingTiles.Find(Coord))
+						{
+							Result.Add(Coord);
+						}
+						break;
+					case ESelectFilterType::Volume:
+						if (EditingTiles.Find(Coord))
+						{
+							Result.Add(Coord);
+						}
+						break;
+					default:
+						UE_LOG(LogGridPathFinding, Error, TEXT("[USelectionComponent.GetGridCellsInSelectionBox] Invalid FilterType"));
+						break;
+					}
+				}
 			}
 		}
 	});

@@ -10,20 +10,21 @@
 #include "GridPathFindingBlueprintFunctionLib.h"
 #include "GridPathFindingSettings.h"
 #include "JsonObjectConverter.h"
+#include "TokenActor.h"
 #include "BuildGridMap/BuildGridMapRenderer.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMultiTileEnvCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMapColCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMapNameCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMapRowCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMapTypeCommand.h"
-#include "BuildGridMap/Command/BuildGridMapChangeTileEnvCommand.h"
-#include "BuildGridMap/Command/BuildGridMapChangeTileEnvTextureCommand.h"
+#include "BuildGridMap/Command/BuildGridMapChangeOrientation.h"
 #include "BuildGridMap/Command/BuildGridMapChangeTileSizeCommand.h"
 #include "BuildGridMap/Command/BuildGridMapCommandManager.h"
 #include "BuildGridMap/UI/BuildGridMapMapConfigWidget.h"
 #include "BuildGridMap/UI/BuildGridMapTileConfigWidget.h"
 #include "BuildGridMap/UI/BuildGridMapWindow.h"
 #include "Components/EditableTextBox.h"
+#include "Components/Button.h"
 
 void ABuildGridMapGameMode::BeginPlay()
 {
@@ -40,6 +41,7 @@ void ABuildGridMapGameMode::BeginPlay()
 
 	check(GridMapModel == nullptr);
 	GridMapModel = NewObject<UGridMapModel>(this, UGridMapModel::StaticClass());
+	GridMapModel->EnableTokenCollision = false;
 	BuildGridMapRenderer->SetModel(GridMapModel);
 
 	CommandManager = NewObject<UBuildGridMapCommandManager>(this);
@@ -47,6 +49,56 @@ void ABuildGridMapGameMode::BeginPlay()
 	EmptyMapSave.MapConfig.MapSize = FIntPoint(1, 1);
 	EditingMapSave = EmptyMapSave;
 	HasValidMapSave = false;
+
+	// 加载全部的TokenActor类型
+	// 指定Buff蓝图文件夹路径
+#if WITH_EDITOR
+	auto Settings = GetDefault<UGridPathFindingSettings>();
+	// 获取指定目录下所有资产
+	TArray<FString> AssetPaths;
+	auto RootPath = FPaths::Combine(FPaths::ProjectContentDir(), Settings->TokenActorRootDir);
+	IFileManager::Get().FindFilesRecursive(AssetPaths, *RootPath, TEXT("*.uasset"), true, false);
+	
+	// 加载UGameplayEffect类作为父类参考
+	UClass* TokenActorClass = ATokenActor::StaticClass();
+	if (!TokenActorClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("无法获取ATokenActor类引用, Path: %s"), *RootPath);
+	}
+	else
+	{
+		for (const FString& AssetPath : AssetPaths)
+		{
+			// 转换物理路径为UE资源路径
+			FString RelativePath = AssetPath;
+			RelativePath.RemoveFromStart(FPaths::ProjectContentDir());
+			RelativePath.RemoveFromEnd(TEXT(".uasset"));
+            
+			// 路径格式转换
+			FString UEPath = FString::Printf(TEXT("/Game/%s"), *RelativePath);
+			UEPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+
+			// 加载蓝图资产
+			UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *UEPath);
+			if (Blueprint && Blueprint->GeneratedClass && Blueprint->GeneratedClass->IsChildOf(TokenActorClass))
+			{
+				// 获取蓝图的类型
+				UClass* TokenActorType = Blueprint->GeneratedClass;
+				if (TokenActorType)
+				{
+					TokenActorTypes.Add(TokenActorType);
+					TokenActorTypeStringToIndexMap.Add(TokenActorType->GetName(), TokenActorTypes.Num() - 1);
+					UE_LOG(LogTemp, Warning, TEXT("[加载Token类型]加载TokenActor类型: %s"), *TokenActorType->GetName());
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("无法获取蓝图生成的类: %s"), *UEPath);
+				}
+			}
+		}
+	}
+#endif
+	
 	Super::BeginPlay();
 
 
@@ -62,10 +114,11 @@ void ABuildGridMapGameMode::BeginPlay()
 	BuildGridMapWindow->MapConfigWidget->GridSizeXTextBox->OnTextCommitted.AddDynamic(this, &ABuildGridMapGameMode::OnGridSizeXTextCommitted);
 	BuildGridMapWindow->MapConfigWidget->GridSizeYTextBox->OnTextCommitted.AddDynamic(this, &ABuildGridMapGameMode::OnGridSizeYTextCommitted);
 	BuildGridMapWindow->MapConfigWidget->GridRadiusTextBox->OnTextCommitted.AddDynamic(this, &ABuildGridMapGameMode::OnGridRadiusTextCommitted);
-
+	
 	// 格子配置
 	BuildGridMapWindow->TileConfigWidget->OnTileEnvChanged.AddUObject(this, &ABuildGridMapGameMode::OnTileEnvSelectionChanged);
 	BuildGridMapWindow->TileConfigWidget->EnvTextureIndexTextBox->OnTextCommitted.AddDynamic(this, &ABuildGridMapGameMode::OnEnvTextureIndexTextCommitted);
+	BuildGridMapWindow->TileConfigWidget->AddTokenButton->OnClicked.AddDynamic(this, &ABuildGridMapGameMode::OnAddTokenButtonClick);
 
 	OnSaveStart.AddLambda([this](EBuildGridMapSaveMode InSaveMode)
 	{
@@ -535,6 +588,36 @@ void ABuildGridMapGameMode::DataRecover()
 	// Todo: 增加一个check
 }
 
+void ABuildGridMapGameMode::CreateStandingActors()
+{
+	UE_LOG(LogGridPathFinding, Log, TEXT("[ABuildGridMapGameMode.CreateStandingActors]"));
+
+	// auto EditingMapSave = this->GetMutEditingMapSave();
+	// const TMap<FHCubeCoord, FSerializableTile>& EditingTiles = this->GetEditingTiles();
+
+	for (const auto& Pair : EditingTiles)
+	{
+		// FHTileOrientation TileOrientation = GridMapModel->GetTileOrientation(EditingMapSave.MapConfig.MapType, EditingMapSave.MapConfig.TileOrientation);
+		// auto TileLocation = UGridPathFindingBlueprintFunctionLib::StableCoordToWorld(EditingMapSave.MapConfig, TileOrientation, Pair.Key);
+		//
+		// // 指定生成位置和旋转
+		// // FVector Location = FVector(0, 0, 0);
+		// FRotator Rotation = FRotator(0, 0, 0);
+		//
+		// // 生成Actor实例
+		// FActorSpawnParameters SpawnParams;
+		// SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		// SpawnParams.ObjectFlags |= RF_Transient;
+		//
+		// const FString Path = FString::Printf(TEXT("Blueprint'%s'"), *Pair.Value.TileEnvData.TokenActorClassPath);
+		// UClass* TokenClass = LoadClass<AActor>(nullptr, *Path);
+		// if (TokenClass != nullptr)
+		// {
+		// 	GetWorld()->SpawnActor<ATokenActor>(TokenClass, TileLocation, Rotation, SpawnParams);
+		// }
+	}
+}
+
 void ABuildGridMapGameMode::MarkEditingTilesDirty(const FHCubeCoord& InDirtyCoord)
 {
 	// 只记录需要更新的Chunk
@@ -556,15 +639,17 @@ void ABuildGridMapGameMode::MarkEditingTilesDirty(const TArray<FHCubeCoord>& InD
 
 void ABuildGridMapGameMode::CreateGridMapSave(FName InMapName)
 {
+	auto Settings = GetDefault<UGridPathFindingSettings>();
 	auto NewMapSave = FGridMapSave{};
 	NewMapSave.MapName = InMapName;
 	NewMapSave.CreateTime = FDateTime::Now();
+	NewMapSave.MapConfig.TileOrientation = Settings->HexTileOrientation;
 	// 在创建FGridMapSave时会创建一个唯一的文件夹与之对应， 并且不会被改变
 	// 创建唯一文件夹名称
 	NewMapSave.ChunksDir = FGuid::NewGuid().ToString();
 	// 创建文件夹
-	auto Settings = GetDefault<UGridPathFindingSettings>();
 	FString ChunkDir = FPaths::ProjectContentDir() / Settings->MapSaveFolder / NewMapSave.ChunksDir;
+	// const FString ChunkDir = GetChunksRootDir();
 
 	check(!FPaths::DirectoryExists(ChunkDir));
 	IFileManager::Get().MakeDirectory(*ChunkDir, true);
@@ -602,12 +687,16 @@ void ABuildGridMapGameMode::SwitchEditingMapSave(const FGridMapSave& InMapSave)
 	auto PC = Cast<ABuildGridMapPlayerController>(GetWorld()->GetFirstPlayerController());
 	PC->SetCanInput(false);
 
+	BuildGridMapRenderer->OnRenderOver.Clear();
 	BuildGridMapRenderer->OnRenderOver.AddLambda([this]()
 	{
+		UE_LOG(LogGridPathFinding, Log, TEXT("[ABuildGridMapGameMode.SwitchEditingMapSave] OnRenderOver"));
+		CreateStandingActors();
+
 		BuildGridMapWindow->SetCanInput(true);
 		auto PC = Cast<ABuildGridMapPlayerController>(GetWorld()->GetFirstPlayerController());
 		PC->SetCanInput(true);
-		BuildGridMapRenderer->OnRenderOver.RemoveAll(this);
+		// BuildGridMapRenderer->OnRenderOver.RemoveAll(this);
 	});
 
 	// Todo: 卡顿的话这里也需要修改成异步的
@@ -624,6 +713,7 @@ void ABuildGridMapGameMode::SwitchEditingMapSave(const FGridMapSave& InMapSave)
 		{
 			for (const auto& Tile : ChunkSave.GridTiles)
 			{
+				// UE_LOG(LogGridPathFinding, Log, TEXT("[ABuildGridMapGameMode.SwitchEditingMapSave] log ActorClass: %s"), *Tile.TokenActorClassPath);
 				EditingTiles.Add(Tile.Coord, Tile);
 			}
 		}
@@ -636,6 +726,32 @@ void ABuildGridMapGameMode::SwitchEditingMapSave(const FGridMapSave& InMapSave)
 	OnSwitchEditingMapSave.Broadcast();
 }
 
+void ABuildGridMapGameMode::DeleteGridMapSave(/*const FName& InMapName*/)
+{
+	const FString CurMapName = EditingMapSave.MapName.ToString();
+	if (CurMapName == TEXT("SP_Empty"))
+	{
+		UE_LOG(LogTemp, Log, TEXT("[ABuildGridMapGameMode.DeleteGridMapSave] empty map dont need to delete"));
+		return;
+	}
+
+	const UGridPathFindingSettings* Settings = GetDefault<UGridPathFindingSettings>();
+	const FString MapPath = FPaths::Combine(FPaths::ProjectContentDir(), Settings->MapSaveFolder, CurMapName + TEXT("_Map.txt"));
+	const FString ChunkDir = GetChunksRootDir();
+
+	// 切换为空地图
+	const FGridMapSave& EmptyMap = GetEmptyMapSave();
+	SwitchEditingMapSave(EmptyMap);
+
+	// 执行删除地块 地图
+	// DeleteFile(MapPath);
+	IFileManager::Get().Delete(*MapPath, false, true);
+	IFileManager::Get().DeleteDirectory(*ChunkDir, false, true);
+
+	// 刷新地图列表
+	OnDeleteGridMapSave.Broadcast();
+}
+
 void ABuildGridMapGameMode::DebugCommandHistory()
 {
 	FString info = CommandManager->GetHistoryCommandInfo();
@@ -645,6 +761,13 @@ void ABuildGridMapGameMode::DebugCommandHistory()
 		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, info);
 	}
 	UE_LOG(LogGridPathFinding, Log, TEXT("[ABuildGridMapGameMode.DebugCommandHistory] %s"), *info);
+}
+
+void ABuildGridMapGameMode::ListenToTokenActorChange(UBuildGridMapTokenActorPanel* NewActorPanel)
+{
+	NewActorPanel->OnTokenActorTypeChanged.AddUObject(this, &ABuildGridMapGameMode::OnTokenActorTypeChanged);
+	NewActorPanel->OnTokenFeaturePropertyChanged.AddUObject(this, &ABuildGridMapGameMode::OnTokenFeaturePropertyChanged);
+	NewActorPanel->OnTokenDeleteClicked.AddDynamic(this, &ABuildGridMapGameMode::OnTokenDeleteClicked);
 }
 
 void ABuildGridMapGameMode::OnMapNameTextCommitted(const FText& Text, ETextCommit::Type CommitMethod)
@@ -688,6 +811,11 @@ void ABuildGridMapGameMode::OnMapDrawModeSelectionChanged(EGridMapDrawMode InDra
 
 void ABuildGridMapGameMode::OnHexTileOrientationSelectionChanged(ETileOrientationFlag InTileOrientation)
 {
+	UE_LOG(LogGridPathFinding, Log, TEXT("[ABuildGridMapGameMode.OnHexTileOrientationSelectionChanged] %s"), *UEnum::GetValueAsString(InTileOrientation));
+
+	auto ChangeOrientationCommand = NewObject<UBuildGridMapChangeOrientation>(CommandManager);
+	ChangeOrientationCommand->Initialize(InTileOrientation);
+	CommandManager->ExecuteCommand(ChangeOrientationCommand);
 }
 
 void ABuildGridMapGameMode::OnMapRowTextCommitted(const FText& Text, ETextCommit::Type CommitMethod)
@@ -825,8 +953,8 @@ void ABuildGridMapGameMode::OnTileEnvSelectionChanged(TObjectPtr<UGridEnvironmen
 	}
 
 	// 改变多个格子环境类型的命令
-	FName NewEnvTypeID = NewGridEnvironment == nullptr ? UGridEnvironmentType::EmptyEnvTypeID : NewGridEnvironment->TypeID;
-	auto Command = NewObject<UBuildGridMapChangeMultiTileEnvCommand>(CommandManager);
+	const FName NewEnvTypeID = NewGridEnvironment == nullptr ? UGridEnvironmentType::EmptyEnvTypeID : NewGridEnvironment->TypeID;
+	UBuildGridMapChangeMultiTileEnvCommand* Command = NewObject<UBuildGridMapChangeMultiTileEnvCommand>(CommandManager);
 	Command->Initialize(MoveTemp(SelectedCoords), NewEnvTypeID);
 	CommandManager->ExecuteCommand(Command);
 }
@@ -869,6 +997,183 @@ void ABuildGridMapGameMode::OnEnvTextureIndexTextCommitted(const FText& Text, ET
 	}
 }
 
+void ABuildGridMapGameMode::OnAddTokenButtonClick()
+{
+	// Todo：暂时不支持撤销操作， 暂时不使用Command, 最后需要将这个操作封装成一个Command
+	// 创建序列化数据
+	auto SelectedCoord = GetSelectedCoord();
+	MarkEditingTilesDirty(SelectedCoord);
+
+	if (!EditingTiles.Contains(SelectedCoord))
+	{
+		FSerializableTile NewTile;
+		NewTile.Coord = SelectedCoord;
+		EditingTiles.Add(SelectedCoord, NewTile);
+	}
+
+	// 创建一个新的SerializableToken
+	FSerializableTokenData NewTokenData;
+	EditingTiles[SelectedCoord].SerializableTokens.Add(NewTokenData);
+	auto NewTokenDataIndex = EditingTiles[SelectedCoord].SerializableTokens.Num() - 1;
+	// 创建一个新的TokenActorPanel
+	BuildGridMapWindow->TileConfigWidget->IntervalCreateTokenActorPanel(NewTokenDataIndex, NewTokenData);
+}
+
+void ABuildGridMapGameMode::OnTokenDeleteClicked(int32 SerializedTokenIndex)
+{
+	// Todo: 修改为Command
+	auto SelectedCoord = GetSelectedCoord();
+	auto TilePtr = EditingTiles.Find(SelectedCoord);
+	if (!TilePtr)
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenDeleteClicked] Tile not found at %s"), *SelectedCoord.ToString());
+		return;
+	}
+
+	if (!TilePtr->SerializableTokens.IsValidIndex(SerializedTokenIndex))
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenDeleteClicked] Invalid token index: %d"), SerializedTokenIndex);
+		return;
+	}
+	
+	MarkEditingTilesDirty(SelectedCoord);
+	// 删除当前位置上的对应Index的TokenActor
+	auto ExistingTokenActor = GridMapModel->GetTokenByIndex(SelectedCoord, SerializedTokenIndex, false);
+	if (ExistingTokenActor)
+	{
+		// 删除Actor
+		GridMapModel->RemoveToken(SelectedCoord, ExistingTokenActor);
+		ExistingTokenActor->Destroy();
+	}
+
+	// 删除SerializableTokenData
+	TilePtr->SerializableTokens.RemoveAt(SerializedTokenIndex);
+
+	// 删除UI上的TokenActorPanel
+	BuildGridMapWindow->TileConfigWidget->IntervalDeleteTokenActorPanel(SerializedTokenIndex);
+}
+
+void ABuildGridMapGameMode::OnTokenActorTypeChanged(int InActorIndex, const FString& NewTypeString)
+{
+	// Todo: 修改为Command
+	auto SelectedCoord = GetSelectedCoord();
+	auto TilePtr = EditingTiles.Find(SelectedCoord);
+	if (!TilePtr)
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenActorTypeChanged] Tile not found at %s"), *SelectedCoord.ToString());
+		return;
+	}
+
+	if (!TilePtr->SerializableTokens.IsValidIndex(InActorIndex))
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenActorTypeChanged] Invalid actor index: %d"), InActorIndex);
+		return;
+	}
+
+	MarkEditingTilesDirty(SelectedCoord);
+
+	// 删除当前位置上的对应Index的TokenActor
+	auto ExistingTokenActor = GridMapModel->GetTokenByIndex(SelectedCoord, InActorIndex, false);
+	if (ExistingTokenActor)
+	{
+		// 删除Actor
+		GridMapModel->RemoveToken(SelectedCoord, ExistingTokenActor);
+		ExistingTokenActor->Destroy();
+	}
+
+	// 如果为空 则不创建新的
+	if (NewTypeString == NoneString)
+	{
+		UE_LOG(LogGridPathFinding, Log, TEXT("[ABuildGridMapGameMode.OnTokenActorTypeChanged] 设置为None, 不创建新的TokenActor"));
+		return;
+	}
+
+	if (!TokenActorTypeStringToIndexMap.Contains(NewTypeString))
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenActorTypeChanged] Invalid token actor type: %s"), *NewTypeString);
+		return;
+	}
+
+	auto& TokenData = TilePtr->SerializableTokens[InActorIndex];
+	TokenData.TokenClass = TokenActorTypes[TokenActorTypeStringToIndexMap[NewTypeString]];
+
+	UE_LOG(LogGridPathFinding, Log, TEXT("[ABuildGridMapGameMode.OnTokenActorTypeChanged] Changed token actor type to: %s at %s"),
+		*NewTypeString, *SelectedCoord.ToString());
+	// 在该位置创建一个新的TokenActor
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	SpawnParams.ObjectFlags |= RF_Transient;
+	auto Location = GridMapModel->StableCoordToWorld(SelectedCoord);
+	auto Rotation = FRotator::ZeroRotator;
+	auto NewTokenActor = GetWorld()->SpawnActor<ATokenActor>(TokenData.TokenClass, Location, Rotation, SpawnParams);
+	NewTokenActor->SetActorEnableCollision(GridMapModel->EnableTokenCollision);
+	// 首次写入序列化数据
+	const auto InitialTokenData = NewTokenActor->SerializableTokenData();
+	check(InitialTokenData.TokenClass == TokenData.TokenClass);
+	TokenData = InitialTokenData; 
+	
+	// 保存TokenActor和SerializableTokenData的关联, 通过在MapModel中按照相同的Index保存指针来实现
+	GridMapModel->AppendToken(SelectedCoord, NewTokenActor);
+
+	// 更新UI上的TokenActorPanel
+	BuildGridMapWindow->TileConfigWidget->IntervalUpdateTokenActorPanel(InActorIndex, TokenData);
+}
+
+void ABuildGridMapGameMode::OnTokenFeaturePropertyChanged(int InActorIndex, int InFeatureIndex, FName InPropertyName,
+	FString NewValue)
+{
+	// Todo: 修改为Command
+	auto SelectedCoord = GetSelectedCoord();
+	auto TilePtr = EditingTiles.Find(SelectedCoord);
+	if (!TilePtr)
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenFeaturePropertyChanged] Tile not found at %s"), *SelectedCoord.ToString());
+		return;
+	}
+
+	if (!TilePtr->SerializableTokens.IsValidIndex(InActorIndex))
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenFeaturePropertyChanged] Invalid actor index: %d"), InActorIndex);
+		return;
+	}
+
+	if (!TilePtr->SerializableTokens[InActorIndex].Features.IsValidIndex(InFeatureIndex))
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenFeaturePropertyChanged] Invalid feature index: %d"), InFeatureIndex);
+		return;
+	}
+
+	auto& MuteSerializableFeature = TilePtr->SerializableTokens[InActorIndex].Features[InFeatureIndex];
+	// 找到对应的属性， 并更新数据
+	bool bFound = false;
+	FSerializableTokenProperty PropertyCopy;
+	for (FSerializableTokenProperty& Property : MuteSerializableFeature.Properties)
+	{
+		if (Property.PropertyName == InPropertyName)
+		{
+			// 更新属性值
+			Property.Value = NewValue;
+			PropertyCopy = Property; // 复制更新后的属性
+			bFound = true;
+			break;
+		}
+	}
+
+	if (!bFound)
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenFeaturePropertyChanged] Property not found: %s"), *InPropertyName.ToString());
+		return;
+	}
+	
+	MarkEditingTilesDirty(SelectedCoord);
+
+	// 更新对应的Actor数据
+	auto ExistingTokenActor = GridMapModel->GetTokenByIndex(SelectedCoord, InActorIndex, false);
+	check(ExistingTokenActor);
+
+	ExistingTokenActor->UpdateFeatureProperty(InFeatureIndex, MuteSerializableFeature.FeatureClass, PropertyCopy);
+}
+
 void ABuildGridMapGameMode::IntervalChangeTileSize(double InSizeX, double InSizeY)
 {
 	auto Command = NewObject<UBuildGridMapChangeTileSizeCommand>(CommandManager);
@@ -884,6 +1189,55 @@ FHCubeCoord ABuildGridMapGameMode::GetSelectedCoord()
 
 FString ABuildGridMapGameMode::GetChunksRootDir()
 {
-	return FPaths::ProjectContentDir() / GetDefault<UGridPathFindingSettings>()->MapSaveFolder / EditingMapSave.
-		ChunksDir;
+	const UGridPathFindingSettings* Settings = GetDefault<UGridPathFindingSettings>();
+	FString Result = FPaths::Combine(FPaths::ProjectContentDir(), Settings->MapSaveFolder, EditingMapSave.ChunksDir);
+	return Result;
+}
+
+void ABuildGridMapGameMode::DeleteFile(const FString& FilePath)
+{
+	if (!FPaths::FileExists(FilePath))
+	{
+		UE_LOG(LogTemp, Error, TEXT("[ABuildGridMapGameMode.DeleteFile] 文件不存在: %s"), *FilePath);
+		return;
+	}
+
+	IFileManager& FileMgr = IFileManager::Get();
+	const bool bSuccess = FileMgr.Delete(*FilePath, false, true);
+	UE_LOG(LogTemp, Log, TEXT("[ABuildGridMapGameMode.DeleteFile] 删除文件 %s"), bSuccess ? TEXT("成功") : TEXT("失败"));
+}
+
+FSoftObjectPath ABuildGridMapGameMode::GetStaticMeshPath(FName ShortName) const
+{
+	if (const FSoftObjectPath* FoundPath = AvailableStaticMeshes.Find(ShortName))
+	{
+		return *FoundPath;
+	}
+	
+	UE_LOG(LogGridPathFinding, Warning, TEXT("[ABuildGridMapGameMode::GetStaticMeshPath] StaticMesh not found: %s"), 
+		*ShortName.ToString());
+	return FSoftObjectPath();
+}
+
+FName ABuildGridMapGameMode::GetStaticMeshShortName(const FString& MeshPathStr) const
+{
+	if (const FName* FoundName = MeshPathStrToShortNameMap.Find(MeshPathStr))
+	{
+		return *FoundName;
+	}
+
+	UE_LOG(LogGridPathFinding, Warning, TEXT("[ABuildGridMapGameMode::GetStaticMeshShortName] StaticMesh path not found: %s"), 
+		*MeshPathStr);
+	return NAME_None;
+}
+
+void ABuildGridMapGameMode::SetAvailableStaticMeshes(const TMap<FName, FSoftObjectPath>& InStaticMeshes)
+{
+	AvailableStaticMeshes = InStaticMeshes;
+	UE_LOG(LogGridPathFinding, Log, TEXT("[ABuildGridMapGameMode::SetAvailableStaticMeshes] Updated StaticMesh cache with %d entries"), 
+		AvailableStaticMeshes.Num());
+	for (const auto& Pair : AvailableStaticMeshes)
+	{
+		MeshPathStrToShortNameMap.Add(Pair.Value.ToString(), Pair.Key);
+	}
 }

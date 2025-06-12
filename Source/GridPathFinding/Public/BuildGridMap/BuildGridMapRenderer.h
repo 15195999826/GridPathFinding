@@ -26,5 +26,7 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	
 protected:
-	virtual void OnTileModify(EGridMapModelTileModifyType GridMapModelTileModify, const FHCubeCoord& InCoord, const FTileInfo& OldTileInfo, const FTileInfo& NewTileInfo) override;
+	virtual void RenderTiles() override;
+
+	virtual void OnTileEnvUpdate(const FHCubeCoord& InCoord, const FTileEnvData& OldTileEnv, const FTileEnvData& NewTileEnv) override;
 };

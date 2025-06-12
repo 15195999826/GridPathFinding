@@ -163,7 +163,6 @@ void UHexPathFollowingComponent::OnActorBump(AActor *SelfActor, AActor *OtherAct
 		// Just broadcast the event.
 		OnActorBumped.Broadcast(OtherActor->GetActorLocation());
 	}
-	
 }
 
 void UHexPathFollowingComponent::FollowPathSegment(float DeltaTime)

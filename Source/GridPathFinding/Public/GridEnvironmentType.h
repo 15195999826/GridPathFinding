@@ -45,6 +45,9 @@ struct FGridEnvironmentMaterialCustomData
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, DisplayName="贴图Category")
 	float TextureArrayCategory;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, DisplayName="贴图Category")
+	float DefaultTint = 1.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, DisplayName="Roughness")
 	float Roughness = 1.f;
 };

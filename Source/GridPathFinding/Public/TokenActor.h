@@ -1,0 +1,81 @@
+﻿// Fill out your copyright notice in the Description page of Project Settings.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
+#include "Types/SerializableTokenData.h"
+#include "Types/TokenActorData.h"
+#include "TokenActor.generated.h"
+
+UCLASS()
+class GRIDPATHFINDING_API ATokenActor : public AActor
+{
+	GENERATED_BODY()
+
+	inline static int32 TokenIDCounter = 0;
+
+public:
+	// Sets default values for this actor's properties
+	ATokenActor();
+
+protected:
+	// Called when the game starts or when spawned
+	virtual void BeginPlay() override;
+
+public:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	TObjectPtr<USceneComponent> SceneRoot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	TObjectPtr<UStaticMeshComponent> MeshComponent;
+	
+	int32 GetTokenID() const
+	{
+		return TokenID;
+	}
+
+	FSerializableTokenData SerializableTokenData();
+
+	void DeserializeTokenData(const FSerializableTokenData& TokenData);
+	
+	void UpdateFeatureProperty(int InFeatureIndex, TSubclassOf<UActorComponent> FeatureClass, const FSerializableTokenProperty& PropertyCopy);
+
+private:
+	int32 TokenID;
+
+#pragma region Serialization
+public:
+	// 将Actor转换为结构体
+	UFUNCTION(BlueprintCallable, Category = "Serialization")
+	FTokenActorStruct ToStruct() const;
+
+	// 从结构体更新Actor
+	UFUNCTION(BlueprintCallable, Category = "Serialization")
+	bool FromStruct(const FTokenActorStruct& ActorStruct);
+
+	// 将结构体序列化为JSON字符串
+	UFUNCTION(BlueprintCallable, Category = "Serialization")
+	static FString StructToJson(const FTokenActorStruct& ActorStruct);
+
+	// 从JSON字符串反序列化为结构体
+	UFUNCTION(BlueprintCallable, Category = "Serialization")
+	static bool JsonToStruct(const FString& JsonString, FTokenActorStruct& OutActorStruct);
+
+	// 将Actor序列化为JSON字符串
+	UFUNCTION(BlueprintCallable, Category = "Serialization")
+	FString SerializeToJson() const;
+
+	// 从JSON字符串反序列化Actor
+	UFUNCTION(BlueprintCallable, Category = "Serialization")
+	bool DeserializeFromJson(const FString& JsonString);
+
+	// 将Actor保存到JSON文件
+	UFUNCTION(BlueprintCallable, Category = "Serialization")
+	bool SaveToJsonFile(const FString& FilePath) const;
+
+	// 从JSON文件加载Actor
+	UFUNCTION(BlueprintCallable, Category = "Serialization")
+	bool LoadFromJsonFile(const FString& FilePath);
+#pragma endregion
+};

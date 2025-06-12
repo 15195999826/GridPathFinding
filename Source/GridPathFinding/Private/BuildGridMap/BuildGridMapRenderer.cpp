@@ -7,6 +7,9 @@
 #include "GridMapModel.h"
 #include "GridPathFinding.h"
 #include "GridPathFindingSettings.h"
+#include "SpringArmCameraActor.h"
+#include "BuildGridMap/BuildGridMapBlueprintFunctionLib.h"
+#include "BuildGridMap/BuildGridMapPlayerController.h"
 #include "Components/InstancedStaticMeshComponent.h"
 
 
@@ -29,29 +32,17 @@ void ABuildGridMapRenderer::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 }
 
-void ABuildGridMapRenderer::OnTileModify(EGridMapModelTileModifyType GridMapModelTileModify, const FHCubeCoord& InCoord,
-                                         const FTileInfo& OldTileInfo, const FTileInfo& NewTileInfo)
+void ABuildGridMapRenderer::RenderTiles()
 {
-	switch (GridMapModelTileModify)
-	{
-		case EGridMapModelTileModifyType::Add:
-			{
-				const auto TileEnvData = GridModel->GetTileEnvDataMapPtr()->Find(InCoord);
-				UpdateTile(InCoord, UGridEnvironmentType::EmptyEnvTypeID,
-				           NewTileInfo.EnvironmentType, *TileEnvData);
-			}
-			break;
-		case EGridMapModelTileModifyType::Remove:
-			UpdateTile(InCoord, OldTileInfo.EnvironmentType,
-			           UGridEnvironmentType::EmptyEnvTypeID, FTileEnvData());
-			break;
-		case EGridMapModelTileModifyType::Update:
-			{
-				const auto TileEnvData = GridModel->GetTileEnvDataMapPtr()->Find(InCoord);
-				UpdateTile(InCoord, OldTileInfo.EnvironmentType, NewTileInfo.EnvironmentType,
-				           *TileEnvData);
-			}
+	// 更新光标尺寸
+	auto SpringArmCamera = Cast<ABuildGridMapPlayerController>(GetWorld()->GetFirstPlayerController())->GetSpringArmCamera();
+	SpringArmCamera->UpdateCursorSize(UBuildGridMapBlueprintFunctionLib:: GetCursorSize(*GridModel->GetMapConfigPtr()));
+	Super::RenderTiles();
+}
 
-			break;
-	}
+void ABuildGridMapRenderer::OnTileEnvUpdate(const FHCubeCoord& InCoord, const FTileEnvData& OldTileEnv,
+                                            const FTileEnvData& NewTileEnv)
+{
+	
+	UpdateTileEnvRenderer(InCoord,OldTileEnv, NewTileEnv);
 }

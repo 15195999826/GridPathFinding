@@ -5,7 +5,10 @@
 
 #include "GridMapModel.h"
 #include "GridPathFinding.h"
+#include "GridPathFindingBlueprintFunctionLib.h"
 #include "GridPathFindingSettings.h"
+#include "TokenActor.h"
+#include "BuildGridMap/BuildGridMapGameMode.h"
 #include "Components/InstancedStaticMeshComponent.h"
 
 
@@ -42,12 +45,12 @@ void AGridMapRenderer::SetModel(UGridMapModel* InModel)
 	if (GridModel)
 	{
 		GridModel->OnTilesDataBuildCancel.RemoveAll(this);
-		GridModel->OnTileModify.RemoveAll(this);
+		GridModel->OnTileEnvModify.RemoveAll(this);
 	}
 
 	GridModel = InModel;
 	GridModel->OnTilesDataBuildCancel.AddUObject(this, &AGridMapRenderer::OnTilesDataBuildCancel);
-	GridModel->OnTileModify.AddUObject(this, &AGridMapRenderer::OnTileModify);
+	GridModel->OnTileEnvModify.AddUObject(this, &AGridMapRenderer::OnTileEnvUpdate);
 }
 
 void AGridMapRenderer::RenderGridMap()
@@ -104,22 +107,24 @@ void AGridMapRenderer::ClearGridMap()
 
 void AGridMapRenderer::RenderTiles()
 {
+	UE_LOG(LogGridPathFinding, Log, TEXT("[AGridMapRenderer.RenderTiles] start render"));
 	// Todo: 渲染过程中不允许切换地图、修改数据等操作中断当前的异步任务
 	AsyncTask(ENamedThreads::GameThread, [this]()
 	{
 		auto TilesPtr = GridModel->GetTilesArrayPtr();
-		auto TileEnvDataPtr = GridModel->GetTileEnvDataMapPtr();
+		auto TileEnvDataPtr = GridModel->GetTileEnvMapPtr();
 
 		int32 RenderCount = 0;
 		for (const auto& Tile : *TilesPtr)
 		{
 			auto Coord = Tile.CubeCoord;
-			auto EnvType = Tile.EnvironmentType;
 			auto EnvData = TileEnvDataPtr->Find(Coord);
 
-			check(EnvType != UGridEnvironmentType::EmptyEnvTypeID);
+			// check(EnvType != UGridEnvironmentType::EmptyEnvTypeID);
+			// 打印Coord
+			// UE_LOG(LogGridPathFinding, Log, TEXT("[AGridMapRenderer.RenderTiles] Render Tile at Coord: %s"), *Coord.ToString());
+			UpdateTileEnvRenderer(Coord, FTileEnvData::Invalid, *EnvData);
 
-			UpdateTile(Coord, UGridEnvironmentType::EmptyEnvTypeID, EnvType, *EnvData);
 			RenderCount++;
 
 			if (RenderCount % 1000 == 0)
@@ -179,15 +184,25 @@ void AGridMapRenderer::DrawBackgroundWireframe()
 
 	SetBackgroundWireframeMesh(Config->MapType);
 
+	auto Settings = GetDefault<UGridPathFindingSettings>();
+	// 计算Scale
+	float Scale = 1.0f;
+
+	if (Config->MapType == EGridMapType::HEX_STANDARD)
+	{
+		Scale = Config->HexGridRadius / Settings->BaseHexFrameRadius;
+	}
+
 	auto GridRotator = GetGridRotator();
-	GridModel->StableForEachMapGrid([this, GridRotator](const FHCubeCoord& Coord, int32 Row, int32 Column)
+	GridModel->StableForEachMapGrid([this, GridRotator, Scale](const FHCubeCoord& Coord, int32 Row, int32 Column)
 	{
 		// UE_LOG(LogTemp, Log, TEXT("[DrawBackgroundWireframe] Row: %d, Col: %d"), Row, Column);
 		auto TileLocation = GridModel->StableCoordToWorld(Coord);
 		FTransform WireFrameTransform = FTransform(
 			GridRotator, TileLocation + RenderConfig.BackgroundDrawLocationOffset,
-			FVector::OneVector);
+			FVector::OneVector * Scale);
 		auto Index = BackgroundWireframe->AddInstance(WireFrameTransform, true);
+
 		static TArray<float> DefaultColorData{
 			RenderConfig.BackgroundWireframeColor.R,
 			RenderConfig.BackgroundWireframeColor.G,
@@ -250,12 +265,10 @@ void AGridMapRenderer::SetWireFrameColor(TObjectPtr<UInstancedStaticMeshComponen
 	InWireFrame->UpdateInstanceTransform(Index, Transform, true);
 }
 
-void AGridMapRenderer::OnTileModify(EGridMapModelTileModifyType GridMapModelTileModify, const FHCubeCoord& InCoord,
-                                    const FTileInfo& OldTileInfo, const FTileInfo& NewTileInfo)
+void AGridMapRenderer::OnTileEnvUpdate(const FHCubeCoord& InCoord, const FTileEnvData& OldTileInfo,
+	const FTileEnvData& NewTileInfo)
 {
-	// 处理Tile修改事件
 }
-
 
 void AGridMapRenderer::InitializeEnvironmentComponents()
 {
@@ -313,7 +326,7 @@ void AGridMapRenderer::InitializeEnvironmentComponents()
 		NewComponent->SetMaterial(0, EnvironmentType->BuildGridMapMaterial.LoadSynchronous());
 		NewComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		NewComponent->SetupAttachment(SceneRoot);
-		NewComponent->SetNumCustomDataFloats(2); // 第一个用于区分使用哪个Category， 第二用于指向Texture2dArray的index；
+		NewComponent->SetNumCustomDataFloats(3); // 第一个用于区分使用哪个Category， 第二用于指向Texture2dArray的index；第三个值指向Tint值
 #if WITH_EDITOR
 		NewComponent->CreationMethod = EComponentCreationMethod::Native; // 关键设置
 		NewComponent->SetFlags(RF_Transactional); // 使组件可在编辑器中序列化
@@ -330,6 +343,11 @@ void AGridMapRenderer::InitializeEnvironmentComponents()
 		       Settings->EnvironmentTypes.FilterByPredicate([Mesh](const TSoftObjectPtr<UGridEnvironmentType>& TypePtr) {
 			       return TypePtr.LoadSynchronous() && TypePtr.LoadSynchronous()->BuildGridMapMesh.LoadSynchronous() == Mesh;
 			       }).Num());
+	}
+
+	for (auto& Tuple : EnvType2DefaultCustomDataMap)
+	{
+		Tuple.Value.DefaultTint = DefaultTint;
 	}
 }
 
@@ -354,9 +372,11 @@ UInstancedStaticMeshComponent* AGridMapRenderer::GetEnvironmentComponent(FName T
 }
 
 // Todo: 可以考虑把设置CustomData的功能放到接口类中， 不同项目可以继承接口实现自己的材质球绘制方式
-void AGridMapRenderer::UpdateTile(FHCubeCoord Coord, const FName& OldEnvType, const FName& NewEnvType, const FTileEnvData& InTileEnvData)
+void AGridMapRenderer::UpdateTileEnvRenderer(FHCubeCoord Coord, const FTileEnvData& InOldEnvData,
+                                             const FTileEnvData& InNewEnvData)
 {
-	// 不可能出现Empty 2 Empty的情况
+	auto OldEnvType = InOldEnvData.EnvironmentType;
+	auto NewEnvType = InNewEnvData.EnvironmentType;
 	if (OldEnvType != UGridEnvironmentType::EmptyEnvTypeID)
 	{
 		auto OldEnvTypeISM = GetEnvironmentComponent(OldEnvType);
@@ -389,7 +409,9 @@ void AGridMapRenderer::UpdateTile(FHCubeCoord Coord, const FName& OldEnvType, co
 			check(EnvType2DefaultCustomDataMap.Contains(OldEnvType))
 			const auto& DefaultCustomData = EnvType2DefaultCustomDataMap[OldEnvType];
 			OldEnvTypeISM->SetCustomData(Index, {
-				                             DefaultCustomData.TextureArrayCategory, static_cast<float>(InTileEnvData.TextureIndex),
+				                             DefaultCustomData.TextureArrayCategory,
+				                             static_cast<float>(InNewEnvData.TextureIndex),
+											 DefaultCustomData.DefaultTint,
 				                             DefaultCustomData.Roughness
 			                             });
 			return;
@@ -402,6 +424,14 @@ void AGridMapRenderer::UpdateTile(FHCubeCoord Coord, const FName& OldEnvType, co
 		return;
 	}
 
+	auto MapConfig = GridModel->GetMapConfigPtr();
+	float Scale = 1.0f;
+	if (MapConfig->MapType == EGridMapType::HEX_STANDARD)
+	{
+		auto GSettings = GetDefault<UGridPathFindingSettings>();
+		Scale = MapConfig->HexGridRadius / GSettings->BaseHexGridRadius;
+	}
+
 	// 创建新实例
 	UInstancedStaticMeshComponent* NewEnvISM = GetEnvironmentComponent(NewEnvType);
 	check(NewEnvISM);
@@ -410,18 +440,20 @@ void AGridMapRenderer::UpdateTile(FHCubeCoord Coord, const FName& OldEnvType, co
 	auto TileLocation = GridModel->StableCoordToWorld(Coord);
 	FTransform MeshTransform = FTransform(
 		GridRotator, TileLocation + RenderConfig.BackgroundDrawLocationOffset,
-		FVector::OneVector);
+		FVector::OneVector * Scale);
 	auto Index = NewEnvISM->AddInstance(MeshTransform, true);
 	EnvISMCIndexMap.Add(Coord, Index);
 	// Todo: 赋值正确的CustomData
 	check(EnvType2DefaultCustomDataMap.Contains(NewEnvType))
 	const auto& DefaultCustomData = EnvType2DefaultCustomDataMap[NewEnvType];
 	NewEnvISM->SetCustomData(Index, {
-		                         DefaultCustomData.TextureArrayCategory, static_cast<float>(InTileEnvData.TextureIndex),
+		                         DefaultCustomData.TextureArrayCategory, static_cast<float>(InNewEnvData.TextureIndex),
+		                         DefaultCustomData.DefaultTint,
 		                         DefaultCustomData.Roughness
 	                         });
+	// UE_LOG(LogGridPathFinding, Log, TEXT("[AGridMapRenderer.UpdateTileEnvRenderer] 更新地块: %s, 新环境类型: %s"),
+	//        *Coord.ToString(), *NewEnvType.ToString());
 }
-
 
 void AGridMapRenderer::DebugDrawChunks()
 {

@@ -10,7 +10,7 @@
 #include "Types/TileInfo.h"
 #include "GridMapRenderer.generated.h"
 
-enum class EGridMapModelTileModifyType;
+enum class ETileTokenModifyType;
 class UGridMapModel;
 
 
@@ -19,7 +19,9 @@ struct FGridMapRenderConfig
 {
 	GENERATED_BODY()
 
-	FGridMapRenderConfig(){}
+	FGridMapRenderConfig()
+	{
+	}
 
 	// UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="使用默认地图绘制方式"))
 	// bool bDrawDefaultMap{true};
@@ -29,13 +31,13 @@ struct FGridMapRenderConfig
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="绘制背景Wireframe"))
 	bool bDrawBackgroundWireframe{true};
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="背景Wireframe默认颜色", EditCondition="bDrawBackgroundWireframe", EditConditionHides))
 	FLinearColor BackgroundWireframeColor{FLinearColor::White};
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="背景Wireframe高亮颜色", EditCondition="bDrawBackgroundWireframe", EditConditionHides))
 	FLinearColor BackgroundWireframeHighlightColor{FLinearColor::Red};
-	
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="背景Wireframe默认绘制偏移", EditCondition="bDrawBackgroundWireframe", EditConditionHides))
 	FVector BackgroundDrawLocationOffset = FVector(0.f, 0.f, 0.1f);
 };
@@ -65,17 +67,18 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	FSimpleMulticastDelegate OnRenderOver;
+
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category=Config)
 	FGridMapRenderConfig RenderConfig;
-	
+
 	// 数据模型
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TObjectPtr<UGridMapModel> GridModel;
 
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<USceneComponent> SceneRoot;
-	
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
 	TObjectPtr<UInstancedStaticMeshComponent> GridWireframe;
 
@@ -83,6 +86,7 @@ protected:
 	TObjectPtr<UInstancedStaticMeshComponent> BackgroundWireframe;
 
 	FDelegateHandle TilesDataBuildOverHandle;
+
 public:
 	void SetModel(UGridMapModel* InModel);
 
@@ -91,21 +95,22 @@ public:
 	virtual void ClearGridMap();
 
 	void HighLightBackground(const FHCubeCoord& InCoord, bool bHighLight);
-	
+
 protected:
 	virtual void RenderTiles();
-	
+
 	UFUNCTION(BlueprintImplementableEvent)
 	void SetBackgroundWireframeMesh(EGridMapType InMapType);
-	
+
 	void DrawBackgroundWireframe();
-	
+
 	// ------绘制地图的辅助函数-------
 	FRotator GetGridRotator() const;
 
 	void SetWireFrameColor(TObjectPtr<UInstancedStaticMeshComponent> InWireFrame, int Index, const FLinearColor& InColor, float DefaultHeight, float NewHeight = 0.f);
 
-	virtual void OnTileModify(EGridMapModelTileModifyType GridMapModelTileModify, const FHCubeCoord& InCoord, const FTileInfo& OldTileInfo, const FTileInfo& NewTileInfo);
+	virtual void OnTileEnvUpdate(const FHCubeCoord& InCoord, const FTileEnvData& OldTileInfo, const FTileEnvData& NewTileInfo);
+
 private:
 	void OnTilesDataBuildCancel();
 	void OnTilesDataBuildComplete();
@@ -116,7 +121,7 @@ private:
 protected:
 	UPROPERTY(VisibleAnywhere)
 	TArray<UInstancedStaticMeshComponent*> DynamicEnvironmentComponents;
-	
+
 	// 按照Mesh分组存储组件，而非按环境类型
 	UPROPERTY()
 	TMap<UStaticMesh*, int32> Mesh2ISMCIndexMap;
@@ -130,17 +135,18 @@ protected:
 	// Coord to ISM Index
 	UPROPERTY()
 	TMap<FHCubeCoord, int32> EnvISMCIndexMap;
+
+	UPROPERTY()
+	float DefaultTint = 1.0f;
 	
 	// 为每种环境类型创建对应的ISM组件
-	UFUNCTION(BlueprintCallable)
-	void InitializeEnvironmentComponents();
-    
+	virtual void InitializeEnvironmentComponents();
+
 	// 获取指定环境类型的ISM组件
 	UFUNCTION(BlueprintCallable)
 	UInstancedStaticMeshComponent* GetEnvironmentComponent(FName TypeID);
 
-	virtual void UpdateTile(FHCubeCoord Coord, const FName& OldEnvType, const FName& NewEnvType, const FTileEnvData& InTileEnvData);
-
+	virtual void UpdateTileEnvRenderer(FHCubeCoord Coord, const FTileEnvData& InOldEnvData, const FTileEnvData& InNewEnvData);
 	// ------ 默认环境Mesh绘制功能 End ----------
 
 private:

@@ -4,7 +4,10 @@
 #include "BuildGridMap/Command/BuildGridMapChangeTileSizeCommand.h"
 
 #include "GridMapModel.h"
+#include "SpringArmCameraActor.h"
+#include "BuildGridMap/BuildGridMapBlueprintFunctionLib.h"
 #include "BuildGridMap/BuildGridMapGameMode.h"
+#include "BuildGridMap/BuildGridMapPlayerController.h"
 #include "BuildGridMap/BuildGridMapRenderer.h"
 
 void UBuildGridMapChangeTileSizeCommand::Initialize(const FVector2D& InOldTileSize, const FVector2D& InNewTileSize)
@@ -17,7 +20,7 @@ bool UBuildGridMapChangeTileSizeCommand::Execute()
 {
 	auto GM = GetWorld()->GetAuthGameMode<ABuildGridMapGameMode>();
 	auto MuteMapSave = GM->GetMutEditingMapSave();
-
+	
 	switch (MuteMapSave->MapConfig.MapType) {
 		case EGridMapType::HEX_STANDARD:
 			{
@@ -39,6 +42,10 @@ bool UBuildGridMapChangeTileSizeCommand::Execute()
 
 	GM->GridMapModel->BuildTilesData(MuteMapSave->MapConfig, GM->GetEditingTiles());
 	GM->BuildGridMapRenderer->RenderGridMap();
+
+	// 更新Cursor 光标尺寸
+	auto SpringArmCamera = Cast<ABuildGridMapPlayerController>(GM->GetWorld()->GetFirstPlayerController())->GetSpringArmCamera();
+	SpringArmCamera->UpdateCursorSize(UBuildGridMapBlueprintFunctionLib:: GetCursorSize(MuteMapSave->MapConfig));
 
 	return true;
 }

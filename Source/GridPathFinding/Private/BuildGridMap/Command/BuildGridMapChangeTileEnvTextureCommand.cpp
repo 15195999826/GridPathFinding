@@ -24,7 +24,7 @@ bool UBuildGridMapChangeTileEnvTextureCommand::Execute()
 	EditingTile->TileEnvData.TextureIndex = NewTileTextureIndex;
 
 	// 更新GridModel
-	GM->GridMapModel->ModifyTilesData(EGridMapModelTileModifyType::Update, *EditingTile);
+	GM->GridMapModel->UpdateTileEnv( *EditingTile);
 	
 	GM->MarkEditingTilesDirty(Coord);
 	return true;

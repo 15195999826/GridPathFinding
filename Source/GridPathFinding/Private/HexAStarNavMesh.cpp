@@ -102,7 +102,7 @@ FPathFindingResult AHexAStarNavMesh::FindPath(const FNavAgentProperties& AgentPr
 			// 中文：并运行A*算法，FGraphAStar::FindPath函数需要一个起始索引，一个结束索引，
 			// FGridPathFilter需要我们的GraphAStarNavMesh作为参数，并引用存储我们路径所有索引的数组
 			// Todo: 寻路的时候，
-			auto Filter = FGridPathFilter(*GraphAStarNavMesh);
+			auto Filter = FHexGridPathFilter(*GraphAStarNavMesh);
 			Filter.StartIdx = StartIdx;
 			Filter.EndIdx = EndIdx;
 			// UE_LOG(LogHexAStar_NavMesh, Warning, TEXT("EndCCoord: %s, EndIdx: %d, Query.EndLocation: %s"), *EndCCoord.ToString(), EndIdx, *Query.EndLocation.ToString());
@@ -257,13 +257,13 @@ void AHexAStarNavMesh::SetToStatic()
 // Remember, if the HexGrid is a nullptr we will never use this code
 // but we fallback to the RecastNavMesh implementation of it.
 
-FVector::FReal FGridPathFilter::GetHeuristicScale() const
+FVector::FReal FHexGridPathFilter::GetHeuristicScale() const
 {
 	// For the sake of simplicity we just return 1.f
 	return 1.0f;
 }
 
-FVector::FReal FGridPathFilter::GetHeuristicCost(const int32 StartNodeRef, const int32 EndNodeRef) const
+FVector::FReal FHexGridPathFilter::GetHeuristicCost(const int32 StartNodeRef, const int32 EndNodeRef) const
 {
 #if WITH_EDITOR || UE_BUILD_DEBUG || UE_BUILD_DEVELOPMENT
 	check(NavMeshRef.HexGrid->GridTiles.IsValidIndex(EndNodeRef));
@@ -286,7 +286,7 @@ FVector::FReal FGridPathFilter::GetHeuristicCost(const int32 StartNodeRef, const
 
 // 内置函数寻路中调用GetTraversalCost时，两个格子总是邻居
 // GetHeuristicCost函数，两个格子不一定是邻居
-FVector::FReal FGridPathFilter::GetTraversalCost(const int32 StartNodeRef, const int32 EndNodeRef) const
+FVector::FReal FHexGridPathFilter::GetTraversalCost(const int32 StartNodeRef, const int32 EndNodeRef) const
 {
 	// If EndNodeRef is a valid index of the GridTiles array we return the tile cost, 
 	// if not we return 1 because the traversal cost need to be > 0 or the FGraphAStar will stop the execution
@@ -309,7 +309,7 @@ FVector::FReal FGridPathFilter::GetTraversalCost(const int32 StartNodeRef, const
 	return 1.f;
 }
 
-bool FGridPathFilter::IsTraversalAllowed(const int32 NodeA, const int32 NodeB) const
+bool FHexGridPathFilter::IsTraversalAllowed(const int32 NodeA, const int32 NodeB) const
 {
 	// If NodeB is a valid index of the GridTiles array we return bIsBlocking, 
 	// if not we assume we can traverse so we return true.
@@ -345,7 +345,7 @@ bool FGridPathFilter::IsTraversalAllowed(const int32 NodeA, const int32 NodeB) c
 	return true;
 }
 
-bool FGridPathFilter::WantsPartialSolution() const
+bool FHexGridPathFilter::WantsPartialSolution() const
 {
 	// Just return true
 	return true;

@@ -28,6 +28,7 @@ void UBuildGridMapWindow::NativeConstruct()
 	GM->OnSaveStart.AddUObject(this, &UBuildGridMapWindow::OnSaveStart);
 	GM->OnSaveOver.AddUObject(this, &UBuildGridMapWindow::OnSaveOver);
 	GM->OnSwitchEditingMapSave.AddUObject(this, &UBuildGridMapWindow::OnSwitchEditingMapSave);
+	GM->OnDeleteGridMapSave.AddUObject(this, &UBuildGridMapWindow::OnDeleteGridMapSave);
 
 	// 指令相关的事件监听
 	auto CommandManager = GM->GetCommandManager();

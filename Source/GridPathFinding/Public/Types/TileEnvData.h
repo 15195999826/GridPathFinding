@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "CoreMinimal.h"
+#include "GridEnvironmentType.h"
 #include "TileEnvData.generated.h"
 
 /**
@@ -11,16 +12,30 @@ struct FTileEnvData
 {
 	GENERATED_BODY()
 
+	static const FTileEnvData Invalid;
+	
 	FTileEnvData(): TextureIndex(0)
 	{
+		EnvironmentType = UGridEnvironmentType::EmptyEnvTypeID;
 	}
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName EnvironmentType;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 TextureIndex;
+	
+
+	FString ToString() const
+	{
+		FString Ret = FString::Printf(TEXT("TextureIndex: %d, EnvironmentType: %s"), TextureIndex, *EnvironmentType.ToString());
+		return Ret;
+	}
 
 	friend bool operator==(const FTileEnvData& lhs, const FTileEnvData& rhs)
 	{
-		return lhs.TextureIndex == rhs.TextureIndex;
+		return lhs.TextureIndex == rhs.TextureIndex &&
+			lhs.EnvironmentType == rhs.EnvironmentType;
 	}
 
 	friend bool operator!=(const FTileEnvData& lhs, const FTileEnvData& rhs)

@@ -59,7 +59,8 @@ protected:
 	void OnSaveOver();
 	UFUNCTION(BlueprintImplementableEvent)
 	void OnCreateGridMapSave();
-
+	UFUNCTION(BlueprintImplementableEvent)
+	void OnDeleteGridMapSave();
 private:
 	void OnEmptyEditingMapSave();
 	void OnSwitchEditingMapSave();

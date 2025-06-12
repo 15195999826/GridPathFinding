@@ -38,6 +38,8 @@ public class GridPathFinding : ModuleRules
 				"Json",
 				"JsonUtilities",
 				"InputCore",
+				"ApplicationCore",
+				"UnrealEd",
 				// ... add other public dependencies that you statically link with here ...
 			}
 		);

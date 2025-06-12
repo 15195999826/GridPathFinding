@@ -13,11 +13,12 @@ struct FTileInfo
 
 	FTileInfo(){}
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
-	FHCubeCoord CubeCoord;
+	FTileInfo(FHCubeCoord InCoord): CubeCoord(InCoord)
+	{
+	}
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
-	FName EnvironmentType;
+	FHCubeCoord CubeCoord;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
 	float Height = 1.f;
@@ -38,7 +39,7 @@ struct FTileInfo
 
 	friend bool operator==(const FTileInfo &A, const FTileInfo &B)
 	{
-		return (A.CubeCoord == B.CubeCoord) && (A.EnvironmentType == B.EnvironmentType) && (A.Height == B.Height);
+		return (A.CubeCoord == B.CubeCoord) && (A.Height == B.Height);
 	}
 
 	friend bool operator!=(const FTileInfo &A, const FTileInfo &B)

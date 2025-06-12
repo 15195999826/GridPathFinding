@@ -18,14 +18,14 @@ void UBuildGridMapChangeMultiTileEnvCommand::Initialize(TArray<FHCubeCoord>&& In
 	{
 		auto MyGameMode = GetWorld()->GetAuthGameMode<ABuildGridMapGameMode>();
 		const TMap<FHCubeCoord, FSerializableTile>& EditingTiles = MyGameMode->GetEditingTiles();
-
+		
 		// 保存原始的地块环境
 		OldTileEnvMap.Reserve(SelectedCoords.Num());
 		for (int32 i = 0; i < SelectedCoords.Num(); ++i)
 		{
 			if (EditingTiles.Contains(SelectedCoords[i]))
 			{
-				OldTileEnvMap.Add(SelectedCoords[i], EditingTiles[SelectedCoords[i]].EnvironmentType);
+				OldTileEnvMap.Add(SelectedCoords[i], EditingTiles[SelectedCoords[i]].TileEnvData.EnvironmentType);
 			}
 			else
 			{
@@ -55,11 +55,12 @@ bool UBuildGridMapChangeMultiTileEnvCommand::Execute()
 			const FHCubeCoord& Coord = SelectedCoords[i];
 			if (EditingTiles.Contains(Coord))
 			{
-				auto OldTile = EditingTiles[Coord];
+				auto TileData = EditingTiles[Coord];
 				MyGameMode->GetMutEditingTiles().Remove(Coord);
 
+				TileData.TileEnvData.EnvironmentType = UGridEnvironmentType::EmptyEnvTypeID;
 				MyGameMode->GetBuildGridMapWindow()->TileConfigWidget->BindSingleTileCoord(Coord);
-				MyGameMode->GridMapModel->ModifyTilesData(EGridMapModelTileModifyType::Remove, OldTile);
+				MyGameMode->GridMapModel->UpdateTileEnv(TileData);
 				MyGameMode->MarkEditingTilesDirty(Coord);
 
 				UE_LOG(LogGridPathFinding, Log, TEXT("[Execute] Remove"));
@@ -75,19 +76,19 @@ bool UBuildGridMapChangeMultiTileEnvCommand::Execute()
 			// 修改
 			if (EditingTiles.Contains(Coord))
 			{
-				MyGameMode->GetMutEditingTiles()[Coord].EnvironmentType = NewTileEnv;
+				MyGameMode->GetMutEditingTiles()[Coord].TileEnvData.EnvironmentType = NewTileEnv;
 
-				MyGameMode->GridMapModel->ModifyTilesData(EGridMapModelTileModifyType::Update, EditingTiles[Coord]);
+				MyGameMode->GridMapModel->UpdateTileEnv(EditingTiles[Coord]);
 				UE_LOG(LogGridPathFinding, Log, TEXT("[Execute] Update"));
 			}
 			else // 新增
 			{
 				auto NewTile = FSerializableTile();
 				NewTile.Coord = Coord;
-				NewTile.EnvironmentType = NewTileEnv;
+				NewTile.TileEnvData.EnvironmentType = NewTileEnv;
 				MyGameMode->GetMutEditingTiles().Add(Coord, NewTile);
 
-				MyGameMode->GridMapModel->ModifyTilesData(EGridMapModelTileModifyType::Add, NewTile);
+				MyGameMode->GridMapModel->UpdateTileEnv(NewTile);
 				UE_LOG(LogGridPathFinding, Log, TEXT("[Execute] Add"));
 			}
 			MyGameMode->MarkEditingTilesDirty(Coord);
@@ -124,7 +125,7 @@ bool UBuildGridMapChangeMultiTileEnvCommand::Undo()
 				MyGameMode->GetMutEditingTiles().Remove(Coord);
 
 				MyGameMode->GetBuildGridMapWindow()->TileConfigWidget->BindSingleTileCoord(Coord);
-				MyGameMode->GridMapModel->ModifyTilesData(EGridMapModelTileModifyType::Remove, OldTile);
+				MyGameMode->GridMapModel->UpdateTileEnv(OldTile);
 				MyGameMode->MarkEditingTilesDirty(Coord);
 			}
 		}
@@ -133,17 +134,17 @@ bool UBuildGridMapChangeMultiTileEnvCommand::Undo()
 			if (EditingTiles.Contains(Coord))
 			{
 				// 修改回原来的环境类型
-				MyGameMode->GetMutEditingTiles()[Coord].EnvironmentType = OldEnvType;
-				MyGameMode->GridMapModel->ModifyTilesData(EGridMapModelTileModifyType::Update, EditingTiles[Coord]);
+				MyGameMode->GetMutEditingTiles()[Coord].TileEnvData.EnvironmentType = OldEnvType;
+				MyGameMode->GridMapModel->UpdateTileEnv(EditingTiles[Coord]);
 			}
 			else // 需要重新添加
 			{
 				auto NewTile = FSerializableTile();
 				NewTile.Coord = Coord;
-				NewTile.EnvironmentType = OldEnvType;
+				NewTile.TileEnvData.EnvironmentType = OldEnvType;
 				MyGameMode->GetMutEditingTiles().Add(Coord, NewTile);
 
-				MyGameMode->GridMapModel->ModifyTilesData(EGridMapModelTileModifyType::Add, NewTile);
+				MyGameMode->GridMapModel->UpdateTileEnv(NewTile);
 			}
 			MyGameMode->MarkEditingTilesDirty(Coord);
 		}

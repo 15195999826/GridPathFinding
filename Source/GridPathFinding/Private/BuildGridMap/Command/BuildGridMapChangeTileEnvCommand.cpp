@@ -30,10 +30,10 @@ bool UBuildGridMapChangeTileEnvCommand::Execute()
 		// 创建新的需要记录的地块
 		auto NewTile = FSerializableTile();
 		NewTile.Coord = Coord;
-		NewTile.EnvironmentType = NewTileEnv;
+		NewTile.TileEnvData.EnvironmentType = NewTileEnv;
 		GM->GetMutEditingTiles().Add(Coord, NewTile);
 		// 通知GridModel增加了新的Tile， 由GridModel触发渲染层的更新
-		GM->GridMapModel->ModifyTilesData(EGridMapModelTileModifyType::Add, NewTile);
+		GM->GridMapModel->UpdateTileEnv(NewTile);
 	}
 	else
 	{
@@ -46,13 +46,13 @@ bool UBuildGridMapChangeTileEnvCommand::Execute()
 			// 重置输入框内容， 当环境设置为空时， 数据上删除了该格子的数据
 			GM->GetBuildGridMapWindow()->TileConfigWidget->BindSingleTileCoord(Coord);
 			// 通知GridModel移除了格子
-			GM->GridMapModel->ModifyTilesData(EGridMapModelTileModifyType::Remove, SerializableTile);
+			GM->GridMapModel->UpdateTileEnv(SerializableTile);
 		}
 		else
 		{
-			GM->GetMutEditingTiles()[Coord].EnvironmentType = NewTileEnv;
+			GM->GetMutEditingTiles()[Coord].TileEnvData.EnvironmentType = NewTileEnv;
 			// 通知GirdModel更新了格子
-			GM->GridMapModel->ModifyTilesData(EGridMapModelTileModifyType::Update,GM->GetEditingTiles()[Coord]);
+			GM->GridMapModel->UpdateTileEnv(GM->GetEditingTiles()[Coord]);
 		}
 	}
 	

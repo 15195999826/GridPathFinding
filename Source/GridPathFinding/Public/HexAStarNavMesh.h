@@ -64,9 +64,9 @@ public:
 /**
  * TQueryFilter (FindPath's parameter) filter class is what decides which graph edges can be used and at what cost.
  */
-struct FGridPathFilter
+struct FHexGridPathFilter
 {
-	FGridPathFilter(const AHexAStarNavMesh &InNavMeshRef) : NavMeshRef(InNavMeshRef) {}
+	FHexGridPathFilter(const AHexAStarNavMesh &InNavMeshRef) : NavMeshRef(InNavMeshRef) {}
 
 	int StartIdx{};
 	int EndIdx{};

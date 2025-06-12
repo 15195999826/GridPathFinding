@@ -11,16 +11,21 @@
 
 #include "BuildGridMapPlayerController.generated.h"
 
-UENUM()
-enum class EMouseMode
+UENUM(BlueprintType)
+enum class EMouseMode : uint8
 {
-	SingleSelect,
-	MultiSelect,
-	// 涂色
-	Paint,
+	Invalid UMETA(DisplayName = "无效"),
+	Select UMETA(DisplayName = "选择"),
+	Paint UMETA(DisplayName = "画笔")
 };
 
-class ABuildGridMapGameMode;
+UENUM(BlueprintType)
+enum class ESelectFilterType : uint8
+{
+	None UMETA(DisplayName = "无"),
+	Tile UMETA(DisplayName = "格子"),
+	Volume UMETA(DisplayName = "体积"),
+};
 
 /**
  * 
@@ -35,6 +40,12 @@ public:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 
+	UPROPERTY(BlueprintReadOnly)
+	EMouseMode MouseMode{EMouseMode::Select};
+
+	UPROPERTY(BlueprintReadOnly)
+	ESelectFilterType SelectFilterType{ESelectFilterType::None};
+
 	// 选择组件
 	UPROPERTY(VisibleAnywhere, Category="Selection")
 	TObjectPtr<USelectionComponent> SelectionComponent;
@@ -42,13 +53,19 @@ public:
 protected:
 	UPROPERTY()
 	TWeakObjectPtr<ABuildGridMapGameMode> WeakGM;
-	virtual void RemapHitLocation(FVector& HitLocation) override;
 
-	virtual void CustomTick(float DeltaSeconds, bool OverWidget, bool IsHitGround, const FVector& HitGroundLocation, AActor* InHitActor) override;
+	virtual void RemapHitLocation(FVector& HitLocation, bool IsHitGround, AActor* InHitActor) override;
+
+	virtual void CustomTick(float DeltaSeconds, bool OverWidget, bool IsHitGround, const FVector& HitGroundLocation, AActor* InHitActor, UPrimitiveComponent* InHitComponent) override;
 
 public:
 	UFUNCTION(BlueprintCallable)
-	void ChangeMouseMode(EMouseMode InMouseMode);
+	void ChangeMouseModeEnum(EMouseMode InMouseMode);
+	UFUNCTION(BlueprintCallable)
+	void ChangeMouseModeInt(int32 InMouseMode);
+
+	UFUNCTION(BlueprintCallable)
+	void ChangeSelectFilterType(ESelectFilterType InSelectFilterType);
 
 	const FHCubeCoord& GetFirstSelectedCoord() const
 	{
@@ -80,11 +97,16 @@ protected:
 	bool CanNotInput{false};
 
 private:
-	EMouseMode MouseMode{EMouseMode::SingleSelect};
-
 	void OnSaveStart(EBuildGridMapSaveMode BuildGridMapSaveMode);
 	void OnSaveOver();
 
+	// ------ 复制粘贴 Start-------
+	FSerializableTile CopiedTileData;
+	FHCubeCoord CopiedSourceCoord;
+	void CopySelectedTile();
+	void PasteToSelectedTiles();
+	// ------ 复制粘贴 End -------
+	
 	// 鼠标/键盘绑定 start
 	void OnLeftMousePressHandler(float DeltaSeconds, bool OverWidget, bool IsHitGround,
 	                             const FVector& HitGroundLocation, AActor* InHitActor);
@@ -98,5 +120,8 @@ private:
 	void OnKeyBoardZPressedHandler();
 	void OnKeyBoardLeftShiftPressHandler();
 	void OnKeyBoardLeftShiftReleaseHandler();
+	
+	void OnKeyBoardCPressedHandler();
+	void OnKeyBoardVPressedHandler();
 	// 鼠标/键盘绑定 end
 };

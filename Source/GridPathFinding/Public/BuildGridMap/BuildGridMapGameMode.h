@@ -7,6 +7,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "Types/GridMapSave.h"
 #include "Types/HCubeCoord.h"
+#include "UI/BuildGridMapTokenActorPanel.h"
 #include "BuildGridMapGameMode.generated.h"
 
 class ABuildGridMapRenderer;
@@ -36,6 +37,7 @@ class GRIDPATHFINDING_API ABuildGridMapGameMode : public AGameModeBase
 	inline static FGridMapSave EmptyMapSave{};
 
 public:
+	inline static FString NoneString = TEXT("None");
 	virtual void BeginPlay() override;
 
 public:
@@ -52,11 +54,24 @@ public:
 	UPROPERTY(BlueprintReadOnly)
 	TObjectPtr<UBuildGridMapCommandManager> CommandManager;
 
+
 protected:
 	// 在蓝图中创建和赋值
 	UPROPERTY(BlueprintReadWrite)
 	TObjectPtr<UBuildGridMapWindow> BuildGridMapWindow;
 
+	UPROPERTY(BlueprintReadOnly)
+	TArray<TSubclassOf<ATokenActor>> TokenActorTypes;
+	
+	UPROPERTY()
+	TMap<FString, int32> TokenActorTypeStringToIndexMap;
+
+	// StaticMesh映射表，Key为路径简写，Value为软引用路径
+	UPROPERTY(BlueprintReadOnly)
+	TMap<FName, FSoftObjectPath> AvailableStaticMeshes;
+
+	UPROPERTY(BlueprintReadOnly)
+	TMap<FString, FName> MeshPathStrToShortNameMap;
 public:
 	// 编辑地图相关事件
 	FSimpleMulticastDelegate OnCreateGridMapSave;
@@ -64,6 +79,7 @@ public:
 	FSimpleMulticastDelegate OnSaveOver; // 实现异步保存
 	FSimpleMulticastDelegate OnEmptyEditingMapSave;
 	FSimpleMulticastDelegate OnSwitchEditingMapSave;
+	FSimpleMulticastDelegate OnDeleteGridMapSave;
 
 private:
 	UPROPERTY()
@@ -92,6 +108,37 @@ public:
 	void MarkEditingTilesDirty(const FHCubeCoord& InDirtyCoord);
 
 	void MarkEditingTilesDirty(const TArray<FHCubeCoord>& InDirtyCoords);
+
+	const TArray<TSubclassOf<ATokenActor>>& GetTokenActorTypes() const
+	{
+		return TokenActorTypes;
+	}
+
+	const TMap<FString, int32>& GetTokenActorTypeStringToIndexMap() const
+	{
+		return TokenActorTypeStringToIndexMap;
+	}
+
+	/**
+	 * 获取可用的StaticMesh映射表
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	const TMap<FName, FSoftObjectPath>& GetAvailableStaticMeshes() const
+	{
+		return AvailableStaticMeshes;
+	}
+	
+	/**
+	 * 根据简写名称获取StaticMesh软引用
+	 */
+	FSoftObjectPath GetStaticMeshPath(FName ShortName) const;
+
+	FName GetStaticMeshShortName(const FString& MeshPathStr) const;
+	
+	/**
+	 * 设置可用的StaticMesh映射表（由Editor模块调用）
+	 */
+	void SetAvailableStaticMeshes(const TMap<FName, FSoftObjectPath>& InStaticMeshes);
 
 private:
 	// 当前正在编辑的地图是否为有效的地图
@@ -124,6 +171,8 @@ private:
 
 	// 启动时检查是否存在Temp或者Backup文件夹， 如果有，则进行数据恢复; 目前看起来UE似乎自己处理了相关事务，但是不知道原理=。=
 	void DataRecover();
+
+	void CreateStandingActors();
 
 	// --------- 数据保存相关 End ---------
 
@@ -197,18 +246,20 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void CreateGridMapSave(FName InMapName);
 
-	/**
-	 * 
-	 */
 	UFUNCTION(BlueprintCallable)
 	void SwitchEditingMapSave(const FGridMapSave& InMapSave);
+
+	UFUNCTION(BlueprintCallable)
+	void DeleteGridMapSave(/*const FName& InMapName*/);
 
 	/**
 	 * 打印当前地图的命令
 	 */
 	UFUNCTION(BlueprintCallable)
 	void DebugCommandHistory();
-
+	
+	void ListenToTokenActorChange(UBuildGridMapTokenActorPanel* NewActorPanel);
+	
 private:
 	// Map UI事件
 	UFUNCTION()
@@ -235,6 +286,13 @@ private:
 	void OnTileEnvSelectionChanged(TObjectPtr<UGridEnvironmentType> NewGridEnvironment);
 	UFUNCTION()
 	void OnEnvTextureIndexTextCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+	UFUNCTION()
+	void OnAddTokenButtonClick();
+	UFUNCTION()
+	void OnTokenDeleteClicked(int32 SerializedTokenIndex);
+	
+	void OnTokenActorTypeChanged(int InActorIndex, const FString& NewTypeString);
+	void OnTokenFeaturePropertyChanged(int InActorIndex, int InFeatureIndex, FName InPropertyName, FString NewValue);
 	// UFUNCTION()
 	// void OnEnvTextureIndexTextChanged(const FText& InNewText);
 
@@ -244,4 +302,5 @@ private:
 	// 辅助函数
 	FHCubeCoord GetSelectedCoord();
 	FString GetChunksRootDir();
+	void DeleteFile(const FString& FilePath);
 };

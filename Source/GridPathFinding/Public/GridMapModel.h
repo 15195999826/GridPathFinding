@@ -10,14 +10,16 @@
 #include "GridMapModel.generated.h"
 
 UENUM()
-enum class EGridMapModelTileModifyType
+enum class ETileTokenModifyType
 {
-	Add,
-	Remove,
-	Update,
+	AddTileToken,
+	RemoveTileToken,
+	UpdateTileToken,
 };
 
-DECLARE_MULTICAST_DELEGATE_FourParams(FGridMapMoldelTileModifyDelegate, EGridMapModelTileModifyType, const FHCubeCoord&, const FTileInfo& OldTileInfo, const FTileInfo& NewTileInfo);
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FTileEnvUpdateDelegate, const FHCubeCoord&, const FTileEnvData& OldTileEnv, const FTileEnvData& NewTileEnv);
+
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FTileTokensUpdateDelegate, const FHCubeCoord& Coord, const int32 TokenIndex, const FSerializableTokenData& NewTokenData);
 
 /**
  * 地图的逻辑层数据
@@ -40,10 +42,16 @@ class GRIDPATHFINDING_API UGridMapModel : public UObject
 public:
 	UGridMapModel();
 
+
+	// 是否开启Token的碰撞
+	UPROPERTY()
+	bool EnableTokenCollision{true};
+	
 protected:
 	virtual void BeginDestroy() override;
 
 protected:
+	// 运行时用于寻路相关的数据
 	UPROPERTY()
 	TArray<FTileInfo> Tiles;
 
@@ -51,14 +59,17 @@ protected:
 	UPROPERTY()
 	TMap<FHCubeCoord, TWeakObjectPtr<AActor>> StandingActors;
 
-	// 用于寻路时快速查询Tile数据
-	UPROPERTY()
-	TMap<FHCubeCoord, int32> TileCoordToIndexMap;
-
-	// 环境数据，目前只存放了运行时的渲染数据
+	/**
+	 * 总是创建的, 地图多大这个Map就有多少数据， 一般也不会存在某一个格子没有TileContainer的情况
+	 */
 	UPROPERTY()
 	TMap<FHCubeCoord, FTileEnvData> TileEnvDataMap;
 
+	// 当前坐标上的TokenActor数据
+	// 地图编辑器: 保存数据时要对其进行序列化， 读取数据时， 创建这些Actor
+	// 游戏运行时: 读取数据创建这些Actor; 可以通过游戏中的一些功能, 增加、删除、更改这些Actor
+	TMap<FHCubeCoord, TArray<TObjectPtr<ATokenActor>>> Coord2TokensMap;
+	
 	UPROPERTY()
 	FGridMapConfig MapConfig;
 
@@ -71,16 +82,20 @@ public:
 	FSimpleMulticastDelegate OnTilesDataBuildComplete;
 
 	// Build时不会抛出事件， 仅Build完成后再修改才会Broadcast
-	FGridMapMoldelTileModifyDelegate OnTileModify;
+	FTileEnvUpdateDelegate OnTileEnvModify;
 
+	FTileTokensUpdateDelegate OnTileTokensModify;
+	
 	/** 
 	 * 构建地图数据
 	 * 考虑到 InTilesData 的数据量可能会比较大，采用异步任务填充 Tiles 数组
 	 * 允许在再次调用此函数时，终止上次的异步任务，清理数据后启动新的异步任务
 	 */
 	virtual void BuildTilesData(const FGridMapConfig& InMapConfig, const TMap<FHCubeCoord, FSerializableTile>& InTilesData);
-
-	void ModifyTilesData(EGridMapModelTileModifyType ModifyType, const FSerializableTile& InTileData, bool bNotify = true);
+	
+	void UpdateTileEnv(const FSerializableTile& InTileData, bool bNotify = true);
+	
+	void ModifyTileTokens(ETileTokenModifyType ModifyType, const FHCubeCoord& InCoord, const int32 TokenIndex, const FSerializableTokenData& InTokenData, bool bNotify = true);
 
 	bool IsBuildingTilesData() const
 	{
@@ -97,23 +112,43 @@ public:
 		return &Tiles;
 	}
 
-	const TMap<FHCubeCoord, FTileEnvData>* GetTileEnvDataMapPtr() const
+	const TMap<FHCubeCoord, FTileEnvData>* GetTileEnvMapPtr() const
 	{
 		return &TileEnvDataMap;
 	}
 
 	const FTileInfo* GetTilePtr(const FHCubeCoord& InCoord) const
 	{
-		if (TileCoordToIndexMap.Contains(InCoord))
-		{
-			return &Tiles[TileCoordToIndexMap[InCoord]];
-		}
-
-		return nullptr;
+		return &Tiles[StableGetFullMapGridIterIndex(InCoord)];
 	}
 
+	const FTileEnvData& GetTileEnvData(const FHCubeCoord& InCoord) const
+	{
+		if (TileEnvDataMap.Contains(InCoord))
+		{
+			return TileEnvDataMap[InCoord];
+		}
+		else
+		{
+			static FTileEnvData DefaultTileEnvData;
+			return DefaultTileEnvData; // 返回一个默认值或处理错误
+		}
+	}
+
+	const TMap<FHCubeCoord, TArray<TObjectPtr<ATokenActor>>>& GetCoord2TokensMap() const
+	{
+		return Coord2TokensMap;
+	}
+
+	ATokenActor* GetTokenByIndex(const FHCubeCoord& InCoord, int32 InTokenIndex, bool bErrorIfNotExist = true);
+	
+	void AppendToken(const FHCubeCoord& InCoord, ATokenActor* InTokenActor);
+
+	void RemoveToken(const FHCubeCoord& InCoord, ATokenActor* InTokenActor);
 
 	void UpdateStandingActor(const FHCubeCoord& OldCoord, const FHCubeCoord& NewCoord, AActor* InActor);
+
+	void IntervalDeserializeTokens(const FHCubeCoord& InCoord, const TArray<FSerializableTokenData>& InTokensData, bool Clear = true);
 
 	bool TryGetStandingActor(const FHCubeCoord& Coord, AActor*& OutActor) const
 	{
@@ -126,6 +161,11 @@ public:
 		OutActor = nullptr;
 		return false;
 	}
+	
+	const TMap<FHCubeCoord, TWeakObjectPtr<AActor>> GetStandingActorsCopy() const
+	{
+		return StandingActors;
+	}
 
 protected:
 	/** 异步任务类，用于填充 Tiles 数组 */
@@ -133,10 +173,12 @@ protected:
 	{
 	public:
 		FBuildTilesDataTask(UGridMapModel* InOwner, const TMap<FHCubeCoord, FSerializableTile>& InTilesData,
-		                    TSharedPtr<TArray<FTileInfo>> OutTiles, TSharedPtr<TMap<FHCubeCoord, int32>> OutIndexMap,
+		                    TSharedPtr<TArray<FTileInfo>> OutTiles,
 		                    TSharedPtr<TMap<FHCubeCoord, FTileEnvData>> OutEnvData);
 
 		void DoWork();
+		
+		void StartBatchTokenCreation(int32 InBatchSize, int32 CurrentCursor);
 
 		/** 设置任务的友元类，以便在任务完成时通知 */
 		FORCEINLINE TStatId GetStatId() const
@@ -157,11 +199,13 @@ protected:
 		/** 输出的目标数组 */
 		TSharedPtr<TArray<FTileInfo>> TargetTilesPtr;
 
-		/** 输出的索引数组 */
-		TSharedPtr<TMap<FHCubeCoord, int32>> TargetTileCoordToIndexMapPtr;;
-
 		/** 输出的环境数据 */
 		TSharedPtr<TMap<FHCubeCoord, FTileEnvData>> TargetTileEnvDataMapPtr;
+
+		TSharedPtr<TArray<FHCubeCoord>> KeyArray; // 用于批量创建TokenActor时的Key数组
+
+		bool bTokensSpawned = false; // 标记是否已经创建了TokenActor
+		int32 CreateTokenWaitGroupID = 0; // 用于等待Token创建完成的WaitGroup ID
 	};
 
 	/** 当前正在运行的异步任务 */
@@ -186,9 +230,11 @@ public:
 	FHCubeCoord StableWorldToCoord(const FVector& InWorldLocation);
 	FVector StableSnapToGridLocation(const FVector& InWorldLocation);
 
+	UFUNCTION(BlueprintCallable)
 	FIntPoint StableCoordToRowColumn(const FHCubeCoord& InCoord) const;
+	UFUNCTION(BlueprintCallable)
 	FHCubeCoord StableRowColumnToCoord(const FIntPoint& InRowColumn) const;
-
+	FVector StableRowColumnToWorld(const FIntPoint& InRowColumn);
 	// ---------- 坐标转换 End -----------------
 
 	// ---------- 方向、邻居 Start -----------------
@@ -206,14 +252,18 @@ public:
 	 */
 	const FHCubeCoord GetNeighborCoord(const FHCubeCoord& InCoord, int32 InDirection) const;
 
+	UFUNCTION(BlueprintCallable)
+	const FHCubeCoord GetBackwardCoord(const FHCubeCoord& InLocalCoord, const FHCubeCoord& InNextCoord) const;
+
+	UFUNCTION(BlueprintCallable)
+	TArray<FHCubeCoord> GetCoordsBetween(const FHCubeCoord& StartCoord, const FHCubeCoord& EndCoord);
+
 	// ---------- 方向、邻居 End -----------------
 
 	/**
 	 * Coord是否在地图范围内
 	 */
 	bool IsCoordInMapArea(const FHCubeCoord& InCoord) const;
-
-	int GetTileIndex(const FHCubeCoord& InCoord) const;
 
 	/**
 	 * 不考虑该格子是否存在Tile, 保证相同配置下的遍历顺序相同
@@ -226,7 +276,9 @@ public:
 	 * @param InCoord
 	 * @return
 	 */
-	int32 StableGetFullMapGridIterIndex(const FHCubeCoord& InCoord);
+	int32 StableGetFullMapGridIterIndex(const FHCubeCoord& InCoord) const;
+
+	FHCubeCoord StableGetCoordByIndex(const int32 InIndex) const;
 
 	// ---------- Chunk 分区功能 Start------------------
 	int32 StableGetChunkCount() const;
@@ -234,6 +286,8 @@ public:
 	int32 StableGetCoordChunkIndex(const FHCubeCoord& InCoord) const;
 
 	int32 GetDistance(const FHCubeCoord& A, const FHCubeCoord& B) const;
+
+	int32 GetNeighborDirection(const FHCubeCoord& From, const FHCubeCoord& To) const;
 
 	void StableGetChunkCoords(const int32 InChunkIndex, TArray<FHCubeCoord>& OutCoords) const;
 	// ---------- Chunk 分区功能 End------------------
@@ -244,8 +298,26 @@ public:
 	static FHTileOrientation GetTileOrientation(EGridMapType InMapType, ETileOrientationFlag InOrientation);
 
 	TArray<FHCubeCoord> GetRangeCoords(const FHCubeCoord& Center, int32 Radius) const;
+	
+	// 获取邻居索引（高效版本）， 仅用于A星寻路快速查询
+	int32 GetNeighborIndex(int32 NodeIndex, int32 Direction) const;
+
+	int32 GetMaxValidIndex() const { return MaxValidIndex; }
+
+	const FSixDirections& GetSixDirections() const
+	{
+		return SixDirections;
+	}
 private:
 	FSixDirections SixDirections{};
 
 	FHCubeCoord HexCoordRound(const FHFractional& F);
+
+	// 邻居索引缓存 [NodeIndex][Direction] = NeighborIndex
+	TArray<TArray<int32>> NeighborIndicesCache;
+	
+	UPROPERTY()
+	int32 MaxValidIndex = 0;  // 最大有效索引
+
+	void BuildPathFindingCache();
 };

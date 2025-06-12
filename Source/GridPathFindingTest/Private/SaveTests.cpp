@@ -1,14 +1,13 @@
-﻿
-#include "GridPathFindingBlueprintFunctionLib.h"
+﻿#include "GridPathFindingBlueprintFunctionLib.h"
 #include "Misc/AutomationTest.h"
 #include "Types/GridMapSave.h"
 
 #if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 5
-	// UE5 specific flags
+// UE5 specific flags
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-FSaveMapTest,
-"GridPathFinding.SaveMap",  // 测试路径，方便分类和过滤
-EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::ProductFilter
+	FSaveMapTest,
+	"GridPathFinding.SaveMap", // 测试路径，方便分类和过滤
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::ProductFilter
 );
 #else
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -28,7 +27,7 @@ bool FSaveMapTest::RunTest(const FString& Parameters)
 		FSerializableTile Tile;
 		Tile.Coord = FHCubeCoord(i, i, -2 * i);
 		Tile.Height = 1.f;
-		Tile.EnvironmentType = FName(*FString::Printf(TEXT("Env_%d"), i));
+		Tile.TileEnvData.EnvironmentType = FName(*FString::Printf(TEXT("Env_%d"), i));
 		FTileEnvData TileEnvData;
 		TileEnvData.TextureIndex = i;
 		Tile.TileEnvData = TileEnvData;
@@ -56,7 +55,7 @@ bool FSaveMapTest::RunTest(const FString& Parameters)
 			return false;
 		}
 
-		if (Tile.EnvironmentType != ToCompare.EnvironmentType)
+		if (Tile.TileEnvData.EnvironmentType != ToCompare.TileEnvData.EnvironmentType)
 		{
 			UE_LOG(LogTemp, Error, TEXT("EnvironmentType不匹配"));
 			return false;
@@ -72,12 +71,9 @@ bool FSaveMapTest::RunTest(const FString& Parameters)
 			return false;
 		}
 		UE_LOG(LogTemp, Log,
-		       TEXT("%d{Coord: %s, Height: %f, EnvironmentType: %s, TextureIndex: %d, CustomGameplayData: %s}"
-		       ),
-		       i,
-		       *Tile.Coord.ToString(), Tile.Height, *Tile.EnvironmentType.ToString(), Tile.TileEnvData.TextureIndex,
-		       *Tile.CustomGameplayData);
+		       TEXT("%d{Coord: %s, Height: %f, EnvironmentType: %s, TileEnvData: %s, CustomGameplayData: %s"), i,
+		       *Tile.Coord.ToString(), Tile.Height, *Tile.TileEnvData.EnvironmentType.ToString(), *Tile.TileEnvData.ToString(), *Tile.CustomGameplayData);
 	}
-	
+
 	return true;
 }
