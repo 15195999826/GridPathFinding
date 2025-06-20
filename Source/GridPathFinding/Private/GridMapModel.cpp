@@ -137,12 +137,12 @@ void UGridMapModel::ModifyTileTokens(ETileTokenModifyType ModifyType, const FHCu
 
 ATokenActor* UGridMapModel::GetTokenByIndex(const FHCubeCoord& InCoord, int32 InTokenIndex, bool bErrorIfNotExist)
 {
-	if (Coord2TokensMap.Contains(InCoord))
+	if (Coord2TokenIDsMap.Contains(InCoord))
 	{
-		const auto& Tokens = Coord2TokensMap[InCoord];
+		const auto& Tokens = Coord2TokenIDsMap[InCoord];
 		if (InTokenIndex >= 0 && InTokenIndex < Tokens.Num())
 		{
-			return Tokens[InTokenIndex];
+			return TokenMap[Tokens[InTokenIndex]];
 		}
 
 		UE_LOG(LogGridPathFinding, Error, TEXT("[GetTokenByIndex]: Invalid token index %d for coord %s"),
@@ -167,12 +167,13 @@ void UGridMapModel::AppendToken(const FHCubeCoord& InCoord, ATokenActor* InToken
 		return;
 	}
 
-	if (!Coord2TokensMap.Contains(InCoord))
+	if (!Coord2TokenIDsMap.Contains(InCoord))
 	{
-		Coord2TokensMap.Add(InCoord, TArray<TObjectPtr<ATokenActor>>());
+		Coord2TokenIDsMap.Add(InCoord, TArray<int32>());
 	}
 
-	Coord2TokensMap[InCoord].Add(InTokenActor);
+	TokenMap.Add(InTokenActor->GetTokenID(), InTokenActor);
+	Coord2TokenIDsMap[InCoord].Add(InTokenActor->GetTokenID());
 }
 
 void UGridMapModel::RemoveToken(const FHCubeCoord& InCoord, ATokenActor* InTokenActor)
@@ -183,16 +184,19 @@ void UGridMapModel::RemoveToken(const FHCubeCoord& InCoord, ATokenActor* InToken
 		return;
 	}
 
-	if (Coord2TokensMap.Contains(InCoord))
+	InTokenActor->OnRemoveFromMap.Broadcast(InTokenActor);
+	TokenMap.Remove(InTokenActor->GetTokenID());
+
+	if (Coord2TokenIDsMap.Contains(InCoord))
 	{
-		int32 RemovedNum = Coord2TokensMap[InCoord].Remove(InTokenActor);
+		int32 RemovedNum = Coord2TokenIDsMap[InCoord].Remove(InTokenActor->GetTokenID());
 
 		if (RemovedNum > 0)
 		{
 			// 如果移除后该坐标下没有Token了，则清理该坐标的记录
-			if (Coord2TokensMap[InCoord].Num() == 0)
+			if (Coord2TokenIDsMap[InCoord].Num() == 0)
 			{
-				Coord2TokensMap.Remove(InCoord);
+				Coord2TokenIDsMap.Remove(InCoord);
 			}
 			return;
 		}
@@ -202,6 +206,17 @@ void UGridMapModel::RemoveToken(const FHCubeCoord& InCoord, ATokenActor* InToken
 	}
 
 	UE_LOG(LogGridPathFinding, Error, TEXT("[RemoveToken] Coord %s 不存在任何Token"), *InCoord.ToString());
+}
+
+ATokenActor* UGridMapModel::GetToken(int32 InTokenID)
+{
+	if (TokenMap.Contains(InTokenID))
+	{
+		return TokenMap[InTokenID];
+	}
+
+	UE_LOG(LogGridPathFinding, Error, TEXT("[GetToken] Token with ID %d not found"), InTokenID);
+	return nullptr;
 }
 
 void UGridMapModel::UpdateStandingActor(const FHCubeCoord& OldCoord, const FHCubeCoord& NewCoord, AActor* InActor)
@@ -227,17 +242,18 @@ void UGridMapModel::IntervalDeserializeTokens(const FHCubeCoord& InCoord,
 	// 清空当前的
 	if (Clear)
 	{
-		if (Coord2TokensMap.Contains(InCoord))
+		if (Coord2TokenIDsMap.Contains(InCoord))
 		{
-			auto& ExistingTokens = Coord2TokensMap[InCoord];
-			for (auto& TokenActor : ExistingTokens)
+			auto& ExistingTokens = Coord2TokenIDsMap[InCoord];
+			for (auto TokenActorID : ExistingTokens)
 			{
-				if (TokenActor)
+				if (TokenMap.Contains(TokenActorID))
 				{
-					TokenActor->Destroy();
+					TokenMap[TokenActorID]->Destroy();
+					TokenMap.Remove(TokenActorID);
 				}
 			}
-			Coord2TokensMap[InCoord].Empty();
+			Coord2TokenIDsMap[InCoord].Empty();
 		}
 	}
 
@@ -279,7 +295,14 @@ void UGridMapModel::IntervalDeserializeTokens(const FHCubeCoord& InCoord,
 		}
 	}
 
-	Coord2TokensMap.Add(InCoord, TokenActors);
+	TArray<int32> TokenIDs;
+	for (auto TokenActor : TokenActors)
+	{
+		TokenMap.Add(TokenActor->GetTokenID(), TokenActor);
+		TokenIDs.Add(TokenActor->GetTokenID());
+	}
+	
+	Coord2TokenIDsMap.Add(InCoord, TokenIDs);
 }
 
 // 异步任务类的实现

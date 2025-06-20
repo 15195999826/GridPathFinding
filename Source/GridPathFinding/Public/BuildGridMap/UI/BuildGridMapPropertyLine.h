@@ -7,6 +7,7 @@
 #include "Types/SerializableTokenData.h"
 #include "BuildGridMapPropertyLine.generated.h"
 
+class UCheckBox;
 class UComboBoxString;
 class UEditableTextBox;
 class UTextBlock;
@@ -27,6 +28,9 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, meta=(BindWidget))
 	TObjectPtr<UComboBoxString> ComboBoxString;
+
+	UPROPERTY(BlueprintReadOnly, meta=(BindWidget))
+	TObjectPtr<UCheckBox> CheckBox;
 	
 	void InitPropertyLine(const FSerializableTokenProperty& InProperty);
 	void Clean();
@@ -55,7 +59,13 @@ protected:
 
 	UFUNCTION(BlueprintImplementableEvent)
 	FString GetComboBoxValue();
+	
+	UFUNCTION(BlueprintImplementableEvent)
+	void SetCheckBoxValue(const FString& Value);
 
+	UFUNCTION(BlueprintImplementableEvent)
+	FString GetCheckBoxValue();
+	
 	UPROPERTY(BlueprintReadOnly)
 	FName PropertyName;
 	

@@ -6,6 +6,9 @@
 #include "GridPathFinding.h"
 #include "JsonObjectConverter.h"
 #include "TokenFeatureInterface.h"
+#if WITH_EDITOR
+#include "BuildGridMap/BuildGridMapGameMode.h"
+#endif
 
 
 // Sets default values
@@ -29,6 +32,15 @@ ATokenActor::ATokenActor()
 void ATokenActor::BeginPlay()
 {
 	Super::BeginPlay();
+#if WITH_EDITOR
+	auto GM = GetWorld()->GetAuthGameMode();
+	if (Cast<ABuildGridMapGameMode>(GM))
+	{
+		return;
+	}
+#endif
+
+	MeshComponent->SetVisibility(false);
 }
 
 FSerializableTokenData ATokenActor::SerializableTokenData()

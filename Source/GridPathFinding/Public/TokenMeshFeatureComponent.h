@@ -19,6 +19,12 @@ class GRIDPATHFINDING_API UTokenMeshFeatureComponent : public UStaticMeshCompone
 	static const FName RelativeRotationPropertyName;
 	static const FName RelativeScalePropertyName;
 	static const FName SoftMeshPathPropertyName;
+	// static const FName HiddenInGamePropertyName;
+
+private:
+	// UPROPERTY()
+	// bool HiddenInProjectGame = false;
+	
 public:
 	UTokenMeshFeatureComponent(const FObjectInitializer& ObjectInitializer);
 	

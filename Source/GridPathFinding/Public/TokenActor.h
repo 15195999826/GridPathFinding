@@ -8,6 +8,8 @@
 #include "Types/TokenActorData.h"
 #include "TokenActor.generated.h"
 
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnTokenActorRemoveFromMapDelegate, ATokenActor* /*TokenActor*/);
+
 UCLASS()
 class GRIDPATHFINDING_API ATokenActor : public AActor
 {
@@ -34,6 +36,8 @@ public:
 	{
 		return TokenID;
 	}
+
+	FOnTokenActorRemoveFromMapDelegate OnRemoveFromMap;
 
 	FSerializableTokenData SerializableTokenData();
 
@@ -79,3 +83,5 @@ public:
 	bool LoadFromJsonFile(const FString& FilePath);
 #pragma endregion
 };
+
+

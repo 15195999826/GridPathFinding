@@ -59,7 +59,7 @@ void ABuildGridMapGameMode::BeginPlay()
 	auto RootPath = FPaths::Combine(FPaths::ProjectContentDir(), Settings->TokenActorRootDir);
 	IFileManager::Get().FindFilesRecursive(AssetPaths, *RootPath, TEXT("*.uasset"), true, false);
 	
-	// 加载UGameplayEffect类作为父类参考
+	// 加载ATokenActor类作为父类参考
 	UClass* TokenActorClass = ATokenActor::StaticClass();
 	if (!TokenActorClass)
 	{

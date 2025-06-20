@@ -43,9 +43,10 @@ void UBuildGridMapPropertyLine::InitPropertyLine(const FSerializableTokenPropert
 				auto MappedMeshKey = BuildGridMapGM->GetStaticMeshShortName(InProperty.Value);
 				SetComboBoxValue(MappedMeshKey.ToString());
 			}
+			break;
 		case ETokenPropertyType::Bool:
 			{
-				UE_LOG(LogTemp, Log, TEXT("[UBuildGridMapPropertyLine.InitPropertyLine] Bool Value: %s, 尚未实现赋值功能"), *InProperty.Value);
+				SetCheckBoxValue(InProperty.Value);
 			}
 			break;
 	}
@@ -85,8 +86,7 @@ FString UBuildGridMapPropertyLine::GetValueString()
 			}
 		case ETokenPropertyType::Bool:
 			{
-				UE_LOG(LogTemp, Log, TEXT("[UBuildGridMapPropertyLine.GetValueString] Bool Value: 尚未实现获取功能"));
-				return FString();
+				return GetCheckBoxValue();
 			}
 	}
 

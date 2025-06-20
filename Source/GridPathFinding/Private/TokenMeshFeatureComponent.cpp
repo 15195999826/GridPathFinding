@@ -7,6 +7,7 @@ const FName UTokenMeshFeatureComponent::RelativePositionPropertyName = TEXT("Rel
 const FName UTokenMeshFeatureComponent::RelativeRotationPropertyName = TEXT("Rotation");
 const FName UTokenMeshFeatureComponent::RelativeScalePropertyName = TEXT("Scale");
 const FName UTokenMeshFeatureComponent::SoftMeshPathPropertyName = TEXT("SoftMeshPath");
+// const FName UTokenMeshFeatureComponent::HiddenInGamePropertyName = TEXT("HiddenInGame");
 
 UTokenMeshFeatureComponent::UTokenMeshFeatureComponent(const FObjectInitializer& ObjectInitializer)
 	:Super(ObjectInitializer)
@@ -39,6 +40,14 @@ TArray<FSerializableTokenProperty> UTokenMeshFeatureComponent::SerializeFeatureP
 	FSoftObjectPath SoftObjectPath = SoftMesh.ToSoftObjectPath();
 	FSerializableTokenProperty MeshPathProperty{ETokenPropertyType::SoftMeshPath, SoftMeshPathPropertyName, SoftObjectPath.ToString()};
 	Properties.Add(MeshPathProperty);
+
+	// // bool Hidden In Game
+	// FSerializableTokenProperty HiddenInGameProperty{
+	// 	ETokenPropertyType::Bool,
+	// 	HiddenInGamePropertyName,
+	// 	FString::FromInt(HiddenInProjectGame ? 1 : 0) // 将bool转换为字符串
+	// };
+	// Properties.Add(HiddenInGameProperty);
 	
 	return Properties;
 }
@@ -86,4 +95,17 @@ void UTokenMeshFeatureComponent::UpdateFeatureProperty(const FSerializableTokenP
 		TSoftObjectPtr<UStaticMesh> SoftMesh(SoftObjectPath);
 		SetStaticMesh(SoftMesh.LoadSynchronous());
 	}
+// 	else if (InNewProperty.PropertyName == HiddenInGamePropertyName)
+// 	{
+// #if WITH_EDITOR
+// 		auto GM = GetWorld()->GetAuthGameMode();
+// 		if (Cast<ABuildGridMapGameMode>(GM))
+// 		{
+// 			return;
+// 		}
+// #endif
+// 		int bHiddenInGameInt = FCString::Atoi(*InNewProperty.Value);
+// 		HiddenInProjectGame = (bHiddenInGameInt != 0);
+// 		SetVisibility(HiddenInProjectGame);
+// 	}
 }
