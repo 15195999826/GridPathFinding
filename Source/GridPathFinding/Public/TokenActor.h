@@ -37,6 +37,11 @@ public:
 		return TokenID;
 	}
 
+	/**
+	 * 游戏运行时， 初始化Token功能, 需要自行在游戏玩法流程中调用
+	 */
+	void InitGameplayToken() const;
+
 	FOnTokenActorRemoveFromMapDelegate OnRemoveFromMap;
 
 	FSerializableTokenData SerializableTokenData();

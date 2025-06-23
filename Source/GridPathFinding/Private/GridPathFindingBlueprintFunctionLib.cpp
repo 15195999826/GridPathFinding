@@ -7,7 +7,6 @@
 #include "GridPathFindingSettings.h"
 #include "HGTypes.h"
 #include "JsonObjectConverter.h"
-#include "WaitGroupManager.h"
 
 TArray<FName> UGridPathFindingBlueprintFunctionLib::GetAllMapSaveNames()
 {

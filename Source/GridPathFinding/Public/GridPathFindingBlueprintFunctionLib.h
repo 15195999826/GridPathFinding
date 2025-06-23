@@ -8,6 +8,7 @@
 #include "Types/GridMapSave.h"
 #include "GridPathFindingBlueprintFunctionLib.generated.h"
 
+class UGridMapModel;
 /**
  * 
  */

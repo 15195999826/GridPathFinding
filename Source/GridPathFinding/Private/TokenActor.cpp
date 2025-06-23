@@ -43,6 +43,17 @@ void ATokenActor::BeginPlay()
 	MeshComponent->SetVisibility(false);
 }
 
+void ATokenActor::InitGameplayToken() const
+{
+	auto TokenFeatures = GetComponentsByInterface(UTokenFeatureInterface::StaticClass());
+
+	for (UActorComponent* Component : TokenFeatures)
+	{
+		auto FeatureInterface = Cast<ITokenFeatureInterface>(Component);
+		FeatureInterface->InitGameplayFeature();
+	}
+}
+
 FSerializableTokenData ATokenActor::SerializableTokenData()
 {
 	FSerializableTokenData TokenData;

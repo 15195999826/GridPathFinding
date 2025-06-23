@@ -28,4 +28,6 @@ public:
 	virtual void DeserializeFeatureProperties(const TArray<FSerializableTokenProperty>& Properties) = 0;
 
 	virtual void UpdateFeatureProperty(const FSerializableTokenProperty& InNewProperty) = 0;
+
+	virtual void InitGameplayFeature() = 0;
 };

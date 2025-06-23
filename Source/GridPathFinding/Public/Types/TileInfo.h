@@ -28,8 +28,9 @@ struct FTileInfo
 	float Cost = 1.f;
 
 	// 从环境类型中读取的是否是障碍物， 方便快速寻路
+	// Block计数， 只有当数值为0时, 不被Block
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
-	bool bIsBlocking = false;
+	int32 BlockCount = 0;
 
 	//  ---- 寻路格子占用数据 Start----
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)

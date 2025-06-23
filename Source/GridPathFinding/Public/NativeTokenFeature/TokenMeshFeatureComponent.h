@@ -33,4 +33,6 @@ public:
 	virtual void DeserializeFeatureProperties(const TArray<FSerializableTokenProperty>& Properties) override;
 
 	virtual void UpdateFeatureProperty(const FSerializableTokenProperty& InNewProperty) override;
+
+	virtual void InitGameplayFeature() override{};
 };

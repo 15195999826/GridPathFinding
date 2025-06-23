@@ -309,6 +309,17 @@ bool FGridPathFilter::IsTraversalAllowed(const int32 NodeA, const int32 NodeB) c
 	// 中文：如果NodeB是GridTiles数组的有效索引，我们返回bIsBlocking，否则我们假设我们可以遍历，所以我们返回true。
 	// 在这里，您可以执行更复杂的操作，例如使用线跟踪来查看是否有障碍物（例如敌人），在我们的示例中，我们只是使用简单的实现
 	// Todo: 检查该格子是否存在Tile信息， 判定是否可以通行
+	auto GridTiles = NavMeshRef.WeakMapModel->GetTilesArrayPtr();
+	if (GridTiles->IsValidIndex(NodeB))
+	{
+		const auto& TileB = (*GridTiles)[NodeB];
+		// 阻挡计数大于0, 不可通行
+		if (TileB.BlockCount > 0)
+		{
+			return false;
+		}
+	}
+	
 	// if (NavMeshRef.WeakMapModel->GridTiles.IsValidIndex(NodeB))
 	// {
 	// 	FHexTile& TileB = NavMeshRef.HexGrid->GridTiles[NodeB];

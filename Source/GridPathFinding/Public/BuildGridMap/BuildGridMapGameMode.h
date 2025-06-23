@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GridEnvironmentType.h"
 #include "GameFramework/GameModeBase.h"
+#include "Service/MapModelProvider.h"
 #include "Types/GridMapSave.h"
 #include "Types/HCubeCoord.h"
 #include "UI/BuildGridMapTokenActorPanel.h"
@@ -30,12 +31,14 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FBuildGridMapSaveStartDelegate, EBuildGridMa
  * 本插件旨在提供一个格子地图编辑器 + 格子地图寻路的功能
  */
 UCLASS()
-class GRIDPATHFINDING_API ABuildGridMapGameMode : public AGameModeBase
+class GRIDPATHFINDING_API ABuildGridMapGameMode : public AGameModeBase, public IMapModelProvider
 {
 	GENERATED_BODY()
 
 	inline static FGridMapSave EmptyMapSave{};
-
+	
+	virtual UGridMapModel* GetGridMapModel() const override;
+	
 public:
 	inline static FString NoneString = TEXT("None");
 	virtual void BeginPlay() override;

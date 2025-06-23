@@ -159,7 +159,7 @@ ATokenActor* UGridMapModel::GetTokenByIndex(const FHCubeCoord& InCoord, int32 In
 	return nullptr;
 }
 
-void UGridMapModel::AppendToken(const FHCubeCoord& InCoord, ATokenActor* InTokenActor)
+void UGridMapModel::AppendToken(const FHCubeCoord& InCoord, ATokenActor* InTokenActor, bool CallGameplayInit)
 {
 	if (InCoord == FHCubeCoord::Invalid || InTokenActor == nullptr)
 	{
@@ -174,9 +174,14 @@ void UGridMapModel::AppendToken(const FHCubeCoord& InCoord, ATokenActor* InToken
 
 	TokenMap.Add(InTokenActor->GetTokenID(), InTokenActor);
 	Coord2TokenIDsMap[InCoord].Add(InTokenActor->GetTokenID());
+
+	if (CallGameplayInit)
+	{
+		InTokenActor->InitGameplayToken();
+	}
 }
 
-void UGridMapModel::RemoveToken(const FHCubeCoord& InCoord, ATokenActor* InTokenActor)
+void UGridMapModel::RemoveAndDestroyToken(const FHCubeCoord& InCoord, ATokenActor* InTokenActor)
 {
 	if (InCoord == FHCubeCoord::Invalid || InTokenActor == nullptr)
 	{
@@ -193,6 +198,7 @@ void UGridMapModel::RemoveToken(const FHCubeCoord& InCoord, ATokenActor* InToken
 
 		if (RemovedNum > 0)
 		{
+			InTokenActor->Destroy();
 			// 如果移除后该坐标下没有Token了，则清理该坐标的记录
 			if (Coord2TokenIDsMap[InCoord].Num() == 0)
 			{
@@ -303,6 +309,48 @@ void UGridMapModel::IntervalDeserializeTokens(const FHCubeCoord& InCoord,
 	}
 	
 	Coord2TokenIDsMap.Add(InCoord, TokenIDs);
+}
+
+void UGridMapModel::BlockTileOnce(const FVector& InLocation)
+{
+	auto Coord = StableWorldToCoord(InLocation);
+	auto Index = StableGetFullMapGridIterIndex(Coord);
+
+	if (!Tiles.IsValidIndex(Index))
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[UpdateTileInfo] Invalid tile index: %d for coord %s"),
+		       Index, *Coord.ToString());
+		return;
+	}
+
+
+	auto& TileInfo = Tiles[Index];
+	TileInfo.BlockCount = TileInfo.BlockCount + 1;
+}
+
+void UGridMapModel::UnBlockTileOnce(const FVector& InLocation)
+{
+	auto Coord = StableWorldToCoord(InLocation);
+	UnBlockTileOnce(Coord);
+}
+
+void UGridMapModel::UnBlockTileOnce(const FHCubeCoord& InCoord)
+{
+	auto Index = StableGetFullMapGridIterIndex(InCoord);
+
+	if (!Tiles.IsValidIndex(Index))
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[UpdateTileInfo] Invalid tile index: %d for coord %s"),
+			   Index, *InCoord.ToString());
+		return;
+	}
+
+
+	auto& TileInfo = Tiles[Index];
+	if (TileInfo.BlockCount > 0)
+	{
+		TileInfo.BlockCount = TileInfo.BlockCount - 1;
+	}
 }
 
 // 异步任务类的实现
@@ -1116,7 +1164,6 @@ FTileInfo UGridMapModel::IntervalCreateTileInfo(const FSerializableTile& InTileD
 	// 在实际项目中，这部分可能需要根据环境类型查找相应的数据
 	// TODO: 从 EnvironmentType 中获取 Cost 和 bIsBlocking
 	TileInfo.Cost = 1.0f;
-	TileInfo.bIsBlocking = false;
 
 	// Todo: 地图创建完成后，更新Cost和bIsBlocking数据
 	

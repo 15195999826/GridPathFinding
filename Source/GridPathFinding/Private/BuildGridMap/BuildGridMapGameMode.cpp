@@ -12,6 +12,7 @@
 #include "JsonObjectConverter.h"
 #include "TokenActor.h"
 #include "BuildGridMap/BuildGridMapRenderer.h"
+#include "BuildGridMap/BuildTokenFeatureInterface.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMultiTileEnvCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMapColCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMapNameCommand.h"
@@ -25,11 +26,16 @@
 #include "BuildGridMap/UI/BuildGridMapWindow.h"
 #include "Components/EditableTextBox.h"
 #include "Components/Button.h"
+#include "Service/GridPathFindingService.h"
+
+UGridMapModel* ABuildGridMapGameMode::GetGridMapModel() const
+{
+	return GridMapModel;
+}
 
 void ABuildGridMapGameMode::BeginPlay()
 {
 	DataRecover();
-
 	// 遍历场景Actor查询GridMapRenderer
 	for (TActorIterator<ABuildGridMapRenderer> It(GetWorld()); It; ++It)
 	{
@@ -691,12 +697,21 @@ void ABuildGridMapGameMode::SwitchEditingMapSave(const FGridMapSave& InMapSave)
 	BuildGridMapRenderer->OnRenderOver.AddLambda([this]()
 	{
 		UE_LOG(LogGridPathFinding, Log, TEXT("[ABuildGridMapGameMode.SwitchEditingMapSave] OnRenderOver"));
-		CreateStandingActors();
 
+		// 初始化Token
+		auto Tokens = GridMapModel->GetTokens();
+		for (const auto& Tuple : Tokens)
+		{
+			auto BuildGridMapTokenInterface = Cast<IBuildTokenFeatureInterface>(Tuple.Value);
+			if (BuildGridMapTokenInterface)
+			{
+				BuildGridMapTokenInterface->InitBuildGridMapFeature();
+			}
+		}
+	
 		BuildGridMapWindow->SetCanInput(true);
 		auto PC = Cast<ABuildGridMapPlayerController>(GetWorld()->GetFirstPlayerController());
 		PC->SetCanInput(true);
-		// BuildGridMapRenderer->OnRenderOver.RemoveAll(this);
 	});
 
 	// Todo: 卡顿的话这里也需要修改成异步的
@@ -1042,8 +1057,7 @@ void ABuildGridMapGameMode::OnTokenDeleteClicked(int32 SerializedTokenIndex)
 	if (ExistingTokenActor)
 	{
 		// 删除Actor
-		GridMapModel->RemoveToken(SelectedCoord, ExistingTokenActor);
-		ExistingTokenActor->Destroy();
+		GridMapModel->RemoveAndDestroyToken(SelectedCoord, ExistingTokenActor);
 	}
 
 	// 删除SerializableTokenData
@@ -1077,8 +1091,7 @@ void ABuildGridMapGameMode::OnTokenActorTypeChanged(int InActorIndex, const FStr
 	if (ExistingTokenActor)
 	{
 		// 删除Actor
-		GridMapModel->RemoveToken(SelectedCoord, ExistingTokenActor);
-		ExistingTokenActor->Destroy();
+		GridMapModel->RemoveAndDestroyToken(SelectedCoord, ExistingTokenActor);
 	}
 
 	// 如果为空 则不创建新的
@@ -1115,6 +1128,12 @@ void ABuildGridMapGameMode::OnTokenActorTypeChanged(int InActorIndex, const FStr
 	// 保存TokenActor和SerializableTokenData的关联, 通过在MapModel中按照相同的Index保存指针来实现
 	GridMapModel->AppendToken(SelectedCoord, NewTokenActor);
 
+	auto BuildGridMapTokenInterface = Cast<IBuildTokenFeatureInterface>(NewTokenActor);
+	if (BuildGridMapTokenInterface)
+	{
+		BuildGridMapTokenInterface->InitBuildGridMapFeature();
+	}
+	
 	// 更新UI上的TokenActorPanel
 	BuildGridMapWindow->TileConfigWidget->IntervalUpdateTokenActorPanel(InActorIndex, TokenData);
 }

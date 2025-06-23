@@ -142,11 +142,21 @@ public:
 		return Coord2TokenIDsMap;
 	}
 
+	const TMap<int32, TObjectPtr<ATokenActor>>& GetTokens() const
+	{
+		return TokenMap;
+	}
+
 	ATokenActor* GetTokenByIndex(const FHCubeCoord& InCoord, int32 InTokenIndex, bool bErrorIfNotExist = true);
 	
-	void AppendToken(const FHCubeCoord& InCoord, ATokenActor* InTokenActor);
+	void AppendToken(const FHCubeCoord& InCoord, ATokenActor* InTokenActor, bool CallGameplayInit = false);
 
-	void RemoveToken(const FHCubeCoord& InCoord, ATokenActor* InTokenActor);
+	/**
+	 * 删除并销毁
+	 * @param InCoord 
+	 * @param InTokenActor 
+	 */
+	void RemoveAndDestroyToken(const FHCubeCoord& InCoord, ATokenActor* InTokenActor);
 
 	ATokenActor* GetToken(int32 InTokenID);
 
@@ -170,6 +180,11 @@ public:
 	{
 		return StandingActors;
 	}
+
+	void BlockTileOnce(const FVector& InLocation);
+
+	void UnBlockTileOnce(const FVector& InLocation);
+	void UnBlockTileOnce(const FHCubeCoord& InCoord);
 
 protected:
 	/** 异步任务类，用于填充 Tiles 数组 */

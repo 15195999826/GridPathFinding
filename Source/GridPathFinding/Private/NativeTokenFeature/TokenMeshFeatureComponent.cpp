@@ -1,7 +1,7 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "TokenMeshFeatureComponent.h"
+#include "NativeTokenFeature/TokenMeshFeatureComponent.h"
 
 const FName UTokenMeshFeatureComponent::RelativePositionPropertyName = TEXT("RelativePosition");
 const FName UTokenMeshFeatureComponent::RelativeRotationPropertyName = TEXT("Rotation");
