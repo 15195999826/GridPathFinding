@@ -18,6 +18,7 @@ enum class ETokenPropertyType : uint8
 	SoftMeshPath = 6 UMETA(DisplayName = "SoftMesh"),
 };
 
+
 USTRUCT(BlueprintType)
 struct FSerializableTokenProperty
 {

@@ -41,8 +41,7 @@ class GRIDPATHFINDING_API UGridMapModel : public UObject
 
 public:
 	UGridMapModel();
-
-
+	
 	// 是否开启Token的碰撞
 	UPROPERTY()
 	bool EnableTokenCollision{true};
@@ -97,7 +96,7 @@ public:
 	
 	void UpdateTileEnv(const FSerializableTile& InTileData, bool bNotify = true);
 	
-	void ModifyTileTokens(ETileTokenModifyType ModifyType, const FHCubeCoord& InCoord, const int32 TokenIndex, const FSerializableTokenData& InTokenData, bool bNotify = true);
+	// void ModifyTileTokens(ETileTokenModifyType ModifyType, const FHCubeCoord& InCoord, const int32 TokenIndex, const FSerializableTokenData& InTokenData, bool bNotify = true);
 
 	bool IsBuildingTilesData() const
 	{
@@ -130,11 +129,9 @@ public:
 		{
 			return TileEnvDataMap[InCoord];
 		}
-		else
-		{
-			static FTileEnvData DefaultTileEnvData;
-			return DefaultTileEnvData; // 返回一个默认值或处理错误
-		}
+
+		static FTileEnvData DefaultTileEnvData;
+		return DefaultTileEnvData; // 返回一个默认值或处理错误
 	}
 
 	const TMap<FHCubeCoord, TArray<int32>>& GetCoord2TokensMap() const
@@ -146,6 +143,8 @@ public:
 	{
 		return TokenMap;
 	}
+
+	TArray<TObjectPtr<ATokenActor>> GetTokensInCoord(const FHCubeCoord& InCoord);
 
 	ATokenActor* GetTokenByIndex(const FHCubeCoord& InCoord, int32 InTokenIndex, bool bErrorIfNotExist = true);
 	
@@ -186,6 +185,10 @@ public:
 	void UnBlockTileOnce(const FVector& InLocation);
 	void UnBlockTileOnce(const FHCubeCoord& InCoord);
 
+	void UpdateTileHeight(const FHCubeCoord& InCoord, float NewHeight);
+
+	void SetTileCustomData(const FHCubeCoord& InCoord, const FName& Key, const FString& Value);
+	const FString& GetTileCustomData(const FHCubeCoord& InCoord, const FName& Key);
 protected:
 	/** 异步任务类，用于填充 Tiles 数组 */
 	class FBuildTilesDataTask : public FNonAbandonableTask

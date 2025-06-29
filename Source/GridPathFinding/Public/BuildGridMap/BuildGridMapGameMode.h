@@ -87,7 +87,7 @@ public:
 private:
 	UPROPERTY()
 	FGridMapSave EditingMapSave;
-
+	
 	TMap<FHCubeCoord, FSerializableTile> EditingTiles;
 
 	// --------- 数据保存相关 Start ---------
@@ -158,7 +158,7 @@ private:
 	struct FSaveProgress
 	{
 		FThreadSafeBool bIsDirty = false;
-		float Progress = 0.0f;
+		float Progress = 0.0f; 
 		FString StatusMessage;
 
 		FThreadSafeCounter CompletedTasks{0};
@@ -205,7 +205,7 @@ public:
 	{
 		return &EditingMapSave;
 	}
-
+	
 	const TMap<FHCubeCoord, FSerializableTile>& GetEditingTiles() const
 	{
 		return EditingTiles;

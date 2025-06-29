@@ -12,7 +12,9 @@
 #include "JsonObjectConverter.h"
 #include "TokenActor.h"
 #include "BuildGridMap/BuildGridMapRenderer.h"
+#include "BuildGridMap/Command/BuildGirdMapChangeTokenFeaturePropertyCommand.h"
 #include "BuildGridMap/BuildTokenFeatureInterface.h"
+#include "BuildGridMap/Command/BuildGridMapAddTokenCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMultiTileEnvCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMapColCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMapNameCommand.h"
@@ -20,7 +22,9 @@
 #include "BuildGridMap/Command/BuildGridMapChangeMapTypeCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeOrientation.h"
 #include "BuildGridMap/Command/BuildGridMapChangeTileSizeCommand.h"
+#include "BuildGridMap/Command/BuildGridMapChangeTileTokenCommand.h"
 #include "BuildGridMap/Command/BuildGridMapCommandManager.h"
+#include "BuildGridMap/Command/BuildGridMapDeleteTokenCommand.h"
 #include "BuildGridMap/UI/BuildGridMapMapConfigWidget.h"
 #include "BuildGridMap/UI/BuildGridMapTileConfigWidget.h"
 #include "BuildGridMap/UI/BuildGridMapWindow.h"
@@ -1014,9 +1018,16 @@ void ABuildGridMapGameMode::OnEnvTextureIndexTextCommitted(const FText& Text, ET
 
 void ABuildGridMapGameMode::OnAddTokenButtonClick()
 {
+	// Ahren修改
+	auto SelectedCoord = GetSelectedCoord();
+	UBuildGridMapAddTokenCommand* Command = NewObject<UBuildGridMapAddTokenCommand>(CommandManager);
+	Command->Initialize(SelectedCoord);
+	CommandManager->ExecuteCommand(Command);
+
+	// 修改为Command
 	// Todo：暂时不支持撤销操作， 暂时不使用Command, 最后需要将这个操作封装成一个Command
 	// 创建序列化数据
-	auto SelectedCoord = GetSelectedCoord();
+	/*auto SelectedCoord = GetSelectedCoord();
 	MarkEditingTilesDirty(SelectedCoord);
 
 	if (!EditingTiles.Contains(SelectedCoord))
@@ -1031,13 +1042,33 @@ void ABuildGridMapGameMode::OnAddTokenButtonClick()
 	EditingTiles[SelectedCoord].SerializableTokens.Add(NewTokenData);
 	auto NewTokenDataIndex = EditingTiles[SelectedCoord].SerializableTokens.Num() - 1;
 	// 创建一个新的TokenActorPanel
-	BuildGridMapWindow->TileConfigWidget->IntervalCreateTokenActorPanel(NewTokenDataIndex, NewTokenData);
+	BuildGridMapWindow->TileConfigWidget->IntervalCreateTokenActorPanel(NewTokenDataIndex, NewTokenData);*/
 }
 
 void ABuildGridMapGameMode::OnTokenDeleteClicked(int32 SerializedTokenIndex)
 {
-	// Todo: 修改为Command
+	
+	// Ahren修改
 	auto SelectedCoord = GetSelectedCoord();
+	auto TilePtr = EditingTiles.Find(SelectedCoord);
+	if (!TilePtr)
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenDeleteClicked] Tile not found at %s"), *SelectedCoord.ToString());
+		return;
+	}
+
+	if (!TilePtr->SerializableTokens.IsValidIndex(SerializedTokenIndex))
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenDeleteClicked] Invalid token index: %d"), SerializedTokenIndex);
+		return;
+	}
+	UBuildGridMapDeleteTokenCommand* Command = NewObject<UBuildGridMapDeleteTokenCommand>(CommandManager);
+	Command->Initialize(SelectedCoord,SerializedTokenIndex);
+	CommandManager->ExecuteCommand(Command);
+
+	// 修改为Command
+	// Todo: 修改为Command
+	/*auto SelectedCoord = GetSelectedCoord();
 	auto TilePtr = EditingTiles.Find(SelectedCoord);
 	if (!TilePtr)
 	{
@@ -1064,13 +1095,14 @@ void ABuildGridMapGameMode::OnTokenDeleteClicked(int32 SerializedTokenIndex)
 	TilePtr->SerializableTokens.RemoveAt(SerializedTokenIndex);
 
 	// 删除UI上的TokenActorPanel
-	BuildGridMapWindow->TileConfigWidget->IntervalDeleteTokenActorPanel(SerializedTokenIndex);
+	BuildGridMapWindow->TileConfigWidget->IntervalDeleteTokenActorPanel(SerializedTokenIndex);*/
 }
 
 void ABuildGridMapGameMode::OnTokenActorTypeChanged(int InActorIndex, const FString& NewTypeString)
 {
-	// Todo: 修改为Command
-	auto SelectedCoord = GetSelectedCoord();
+	//Ahren修改
+	UE_LOG(LogGridPathFinding, Warning, TEXT("[ABuildGridMapGameMode.OnTileTokenSelectionChanged]"));
+	auto SelectedCoord = GetSelectedCoord();  
 	auto TilePtr = EditingTiles.Find(SelectedCoord);
 	if (!TilePtr)
 	{
@@ -1084,10 +1116,33 @@ void ABuildGridMapGameMode::OnTokenActorTypeChanged(int InActorIndex, const FStr
 		return;
 	}
 
-	MarkEditingTilesDirty(SelectedCoord);
+	UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenActorTypeChanged] actor index: %d"), InActorIndex);
+		
+	UBuildGridMapChangeTileTokenCommand* Command = NewObject<UBuildGridMapChangeTileTokenCommand>(CommandManager);
+	Command->Initialize(SelectedCoord,InActorIndex,NewTypeString);
+	CommandManager->ExecuteCommand(Command);
+
+
+	//Ahren注释 修改为Command
+	// Todo: 修改为Command
+	/*auto SelectedCoord = GetSelectedCoord();
+	auto TilePtr = EditingTiles.Find(SelectedCoord);
+	if (!TilePtr)
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenActorTypeChanged] Tile not found at %s"), *SelectedCoord.ToString());
+		return;
+	}
+
+	if (!TilePtr->SerializableTokens.IsValidIndex(InActorIndex))
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenActorTypeChanged] Invalid actor index: %d"), InActorIndex);
+		return;
+	}*/
+
+	/*MarkEditingTilesDirty(SelectedCoord);*/
 
 	// 删除当前位置上的对应Index的TokenActor
-	auto ExistingTokenActor = GridMapModel->GetTokenByIndex(SelectedCoord, InActorIndex, false);
+	/*auto ExistingTokenActor = GridMapModel->GetTokenByIndex(SelectedCoord, InActorIndex, false);
 	if (ExistingTokenActor)
 	{
 		// 删除Actor
@@ -1135,14 +1190,42 @@ void ABuildGridMapGameMode::OnTokenActorTypeChanged(int InActorIndex, const FStr
 	}
 	
 	// 更新UI上的TokenActorPanel
-	BuildGridMapWindow->TileConfigWidget->IntervalUpdateTokenActorPanel(InActorIndex, TokenData);
+	BuildGridMapWindow->TileConfigWidget->IntervalUpdateTokenActorPanel(InActorIndex, TokenData);*/
+	
 }
 
 void ABuildGridMapGameMode::OnTokenFeaturePropertyChanged(int InActorIndex, int InFeatureIndex, FName InPropertyName,
 	FString NewValue)
 {
-	// Todo: 修改为Command
+	//Ahren修改
 	auto SelectedCoord = GetSelectedCoord();
+	auto TilePtr = EditingTiles.Find(SelectedCoord);
+	if (!TilePtr)
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenFeaturePropertyChanged] Tile not found at %s"), *SelectedCoord.ToString());
+		return;
+	}
+
+	if (!TilePtr->SerializableTokens.IsValidIndex(InActorIndex))
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenFeaturePropertyChanged] Invalid actor index: %d"), InActorIndex);
+		return;
+	}
+
+	if (!TilePtr->SerializableTokens[InActorIndex].Features.IsValidIndex(InFeatureIndex))
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenFeaturePropertyChanged] Invalid feature index: %d"), InFeatureIndex);
+		return;
+	}
+	
+	UBuildGirdMapChangeTokenFeaturePropertyCommand* Command = NewObject<UBuildGirdMapChangeTokenFeaturePropertyCommand>(CommandManager);
+	Command->Initialize(SelectedCoord,InActorIndex,InFeatureIndex,InPropertyName,NewValue);
+	CommandManager->ExecuteCommand(Command);
+
+	
+	//Ahren 修改为Command
+	// Todo: 修改为Command
+	/*auto SelectedCoord = GetSelectedCoord();
 	auto TilePtr = EditingTiles.Find(SelectedCoord);
 	if (!TilePtr)
 	{
@@ -1190,7 +1273,7 @@ void ABuildGridMapGameMode::OnTokenFeaturePropertyChanged(int InActorIndex, int 
 	auto ExistingTokenActor = GridMapModel->GetTokenByIndex(SelectedCoord, InActorIndex, false);
 	check(ExistingTokenActor);
 
-	ExistingTokenActor->UpdateFeatureProperty(InFeatureIndex, MuteSerializableFeature.FeatureClass, PropertyCopy);
+	ExistingTokenActor->UpdateFeatureProperty(InFeatureIndex, MuteSerializableFeature.FeatureClass, PropertyCopy);*/
 }
 
 void ABuildGridMapGameMode::IntervalChangeTileSize(double InSizeX, double InSizeY)

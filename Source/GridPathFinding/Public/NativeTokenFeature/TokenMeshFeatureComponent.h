@@ -7,6 +7,15 @@
 #include "Components/StaticMeshComponent.h"
 #include "TokenMeshFeatureComponent.generated.h"
 
+USTRUCT()
+struct FMyStruct
+{
+	GENERATED_BODY()
+
+	FName Name;
+	int32 Int;
+};
+
 /**
  * 
  */
@@ -24,6 +33,8 @@ class GRIDPATHFINDING_API UTokenMeshFeatureComponent : public UStaticMeshCompone
 private:
 	// UPROPERTY()
 	// bool HiddenInProjectGame = false;
+
+	FMyStruct TestStruct;
 	
 public:
 	UTokenMeshFeatureComponent(const FObjectInitializer& ObjectInitializer);

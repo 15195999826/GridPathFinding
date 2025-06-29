@@ -130,9 +130,22 @@ void UGridMapModel::UpdateTileEnv(const FSerializableTile& InTileData, bool bNot
 	}
 }
 
-void UGridMapModel::ModifyTileTokens(ETileTokenModifyType ModifyType, const FHCubeCoord& InCoord,
-	const int32 TokenIndex, const FSerializableTokenData& InTokenData, bool bNotify)
+TArray<TObjectPtr<ATokenActor>> UGridMapModel::GetTokensInCoord(const FHCubeCoord& InCoord)
 {
+	if (Coord2TokenIDsMap.Contains(InCoord))
+	{
+		TArray<TObjectPtr<ATokenActor>> Tokens;
+		for (int32 TokenID : Coord2TokenIDsMap[InCoord])
+		{
+			if (TokenMap.Contains(TokenID))
+			{
+				Tokens.Add(TokenMap[TokenID]);
+			}
+		}
+		return Tokens;
+	}
+
+	return TArray<TObjectPtr<ATokenActor>>();
 }
 
 ATokenActor* UGridMapModel::GetTokenByIndex(const FHCubeCoord& InCoord, int32 InTokenIndex, bool bErrorIfNotExist)
@@ -351,6 +364,57 @@ void UGridMapModel::UnBlockTileOnce(const FHCubeCoord& InCoord)
 	{
 		TileInfo.BlockCount = TileInfo.BlockCount - 1;
 	}
+}
+
+void UGridMapModel::UpdateTileHeight(const FHCubeCoord& InCoord, float NewHeight)
+{
+	auto Index = StableGetFullMapGridIterIndex(InCoord);
+
+	if (!Tiles.IsValidIndex(Index))
+	{
+		return;
+	}
+
+	auto& TileInfo = Tiles[Index];
+	TileInfo.Height = NewHeight;
+}
+
+void UGridMapModel::SetTileCustomData(const FHCubeCoord& InCoord, const FName& Key, const FString& Value)
+{
+	auto Index = StableGetFullMapGridIterIndex(InCoord);
+	if (!Tiles.IsValidIndex(Index))
+	{
+		return;
+	}
+
+	auto& TileInfo = Tiles[Index];
+	if (!TileInfo.CustomDataMap.Contains(Key))
+	{
+		TileInfo.CustomDataMap.Add(Key, Value);
+	}
+	else
+	{
+		TileInfo.CustomDataMap[Key] = Value;
+	}
+}
+
+const FString& UGridMapModel::GetTileCustomData(const FHCubeCoord& InCoord, const FName& Key)
+{
+	auto Index = StableGetFullMapGridIterIndex(InCoord);
+	if (!Tiles.IsValidIndex(Index))
+	{
+		static FString EmptyString;
+		return EmptyString;
+	}
+
+	auto& TileInfo = Tiles[Index];
+	if (TileInfo.CustomDataMap.Contains(Key))
+	{
+		return TileInfo.CustomDataMap[Key];
+	}
+
+	static FString EmptyString;
+	return EmptyString;
 }
 
 // 异步任务类的实现

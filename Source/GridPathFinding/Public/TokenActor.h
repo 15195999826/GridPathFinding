@@ -50,8 +50,27 @@ public:
 	
 	void UpdateFeatureProperty(int InFeatureIndex, TSubclassOf<UActorComponent> FeatureClass, const FSerializableTokenProperty& PropertyCopy);
 
+	void SetCustomGameplayData(const FName& Key, const FString& Value)
+	{
+		CustomGameplayData.Add(Key, Value);
+	}
+
+	FString GetCustomGameplayData(const FName& Key) const
+	{
+		if (CustomGameplayData.Contains(Key))
+		{
+			return CustomGameplayData[Key];
+		}
+		return FString();
+	}
+
+protected:
+	UPROPERTY()
+	TMap<FName, FString> CustomGameplayData; // 自定义游戏数据
+	
 private:
 	int32 TokenID;
+
 
 #pragma region Serialization
 public:

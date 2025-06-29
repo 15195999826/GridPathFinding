@@ -21,7 +21,7 @@ struct FTileInfo
 	FHCubeCoord CubeCoord;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
-	float Height = 1.f;
+	float Height = 0.f;
 
 	// 从环境类型中读取的Cost， 方便快速寻路
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
@@ -35,6 +35,10 @@ struct FTileInfo
 	//  ---- 寻路格子占用数据 Start----
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
 	bool HasAIBooked{false};
+
+	// ---- 项目自定义数据 ----
+	UPROPERTY()
+	TMap<FName, FString> CustomDataMap;
 	
 	//  ----- 寻路格子占用数据 End----
 
@@ -46,5 +50,10 @@ struct FTileInfo
 	friend bool operator!=(const FTileInfo &A, const FTileInfo &B)
 	{
 		return !(A == B);
+	}
+
+	bool IsBlocking() const
+	{
+		return BlockCount > 0;
 	}
 };

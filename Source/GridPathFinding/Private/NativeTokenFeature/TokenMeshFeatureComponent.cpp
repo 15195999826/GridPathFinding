@@ -95,6 +95,8 @@ void UTokenMeshFeatureComponent::UpdateFeatureProperty(const FSerializableTokenP
 		TSoftObjectPtr<UStaticMesh> SoftMesh(SoftObjectPath);
 		SetStaticMesh(SoftMesh.LoadSynchronous());
 	}
+
+	// 打印当前Rotation的X, Y, Z double
 // 	else if (InNewProperty.PropertyName == HiddenInGamePropertyName)
 // 	{
 // #if WITH_EDITOR
