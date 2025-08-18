@@ -7,6 +7,7 @@
 
 #include "GraphAStar.h"
 #include "GridMapModel.h"
+#include "GridPathFindingIdentifier.h"
 #include "Types/HCubeCoord.h"
 
 
@@ -114,6 +115,17 @@ FPathFindingResult AGridPathFindingNavMesh::FindPath(const FNavAgentProperties& 
 			// FGridPathFilter需要我们的GraphAStarNavMesh作为参数，并引用存储我们路径所有索引的数组
 			// Todo: 寻路的时候，
 			auto Filter = FGridPathFilter(*GraphAStarNavMesh);
+
+			// Todo: 增加一个接口， 然后实现身份标识的功能
+			if (Query.Owner.IsValid())
+			{
+				if (auto IdentifierInterface = Cast<IGridPathFindingIdentifier>(Query.Owner.Get()))
+				{
+					// 如果有身份标识接口，设置过滤器的身份标识
+					Filter.Identifier = IdentifierInterface->GetGridPathFindingIdentifier();
+				}
+			}
+			
 			Filter.StartIdx = StartIdx;
 			Filter.EndIdx = EndIdx;
 			// UE_LOG(LogHexAStar_NavMesh, Warning, TEXT("EndCCoord: %s, EndIdx: %d, Query.EndLocation: %s"), *EndCCoord.ToString(), EndIdx, *Query.EndLocation.ToString());
@@ -276,13 +288,28 @@ void AGridPathFindingNavMesh::SetToStatic()
 FVector::FReal FGridPathFilter::GetHeuristicScale() const
 {
 	// For the sake of simplicity we just return 1.f
+	/**
+	 * | 比例值   | 算法行为        | 搜索特点      | 性能  | 路径质量  |
+	 * |---------|---------------|--------------|------|---------|
+	 * | 0.0     | 变成Dijkstra   | 盲目全方向搜索 | 慢    | 绝对最优  |
+	 * | 1.0     | 标准A*         | 平衡搜索      | 中等  | 最优     |
+	 * | 1.5-3.0 | 启发式偏重      | 更倾向目标方向 | 快    | 通常良好  |
+	 * | >5.0    | 贪婪搜索       | 几乎直奔目标   | 很快  | 可能不最优 |
+	 */
 	return 1.0f;
 }
 
 FVector::FReal FGridPathFilter::GetHeuristicCost(const int32 StartNodeRef, const int32 EndNodeRef) const
 {
-	// Todo: 增加对Cost的计算， 目前寻路只会找最近的格子
-	return 1.0f;
+	/**
+	 *	 * 起点S ────┐         ┌──── 终点G
+	 *           │         │
+	 *           └── 节点A ─┘
+	 *           
+	 * 没有启发式函数：随机搜索所有方向
+	 * 有启发式函数：优先搜索朝向G的方向
+	 */
+	return GetDistanceByIndexUltraFast(StartNodeRef, EndNodeRef);
 }
 
 // 内置函数寻路中调用GetTraversalCost时，两个格子总是邻居
@@ -296,8 +323,15 @@ FVector::FReal FGridPathFilter::GetTraversalCost(const int32 StartNodeRef, const
 	// 请查看GraphAStar.h第244行：ensure(NewTraversalCost > 0);
 
 	// Todo: 暂时未考虑格子的Cost， 全部格子Cost相同
+	// auto StartTileHeight = NavMeshRef.WeakMapModel->GetTileHeight(StartNodeRef);
+	// auto EndTileHeight = NavMeshRef.WeakMapModel->GetTileHeight(EndNodeRef);
+	// auto HeightPenalty = NavMeshRef.WeakMapModel->GetHeightCost(EndTileHeight, StartTileHeight);
+	// // 额外惩罚， 由项目自行定义
+	// auto ExtraPenalty = NavMeshRef.WeakMapModel->GetExtraPenalty(Identifier, StartNodeRef, EndNodeRef);
 	
-	return 1.f;
+	// 1.f 为基础消耗， 防止0的出现
+	// return 1.f + HeightPenalty + ExtraPenalty;
+	return 1.f + NavMeshRef.WeakMapModel->GetTraversalCost(Identifier, StartNodeRef, EndNodeRef);
 }
 
 bool FGridPathFilter::IsTraversalAllowed(const int32 NodeA, const int32 NodeB) const
@@ -309,43 +343,7 @@ bool FGridPathFilter::IsTraversalAllowed(const int32 NodeA, const int32 NodeB) c
 	// 中文：如果NodeB是GridTiles数组的有效索引，我们返回bIsBlocking，否则我们假设我们可以遍历，所以我们返回true。
 	// 在这里，您可以执行更复杂的操作，例如使用线跟踪来查看是否有障碍物（例如敌人），在我们的示例中，我们只是使用简单的实现
 	// Todo: 检查该格子是否存在Tile信息， 判定是否可以通行
-	auto GridTiles = NavMeshRef.WeakMapModel->GetTilesArrayPtr();
-	if (GridTiles->IsValidIndex(NodeB))
-	{
-		const auto& TileB = (*GridTiles)[NodeB];
-		// 阻挡计数大于0, 不可通行
-		if (TileB.BlockCount > 0)
-		{
-			return false;
-		}
-	}
-	
-	// if (NavMeshRef.WeakMapModel->GridTiles.IsValidIndex(NodeB))
-	// {
-	// 	FHexTile& TileB = NavMeshRef.HexGrid->GridTiles[NodeB];
-	// 	if (TileB.bIsBlocking)
-	// 	{
-	// 		// UE_LOG(LogHexAStar_NavMesh, Warning, TEXT("Coord: %s, bIsBlocking: %d"), *TileB.CubeCoord.ToString(), TileB.bIsBlocking);
-	// 		return false;
-	// 	}
-	//
-	// 	if (NodeB == EndIdx)
-	// 	{
-	// 		// UE_LOG(LogHexAStar_NavMesh, Warning, TEXT("EndIdx: %d, NodeA: %d, NodeB: %d, Coord: %s, Coord: %s"), EndIdx, NodeA, NodeB, *NavMeshRef.HexGrid->GridTiles[NodeA].CubeCoord.ToString(), *TileB.CubeCoord.ToString());
-	// 		// If the current tile is the end tile we can always traverse it
-	// 		return true;
-	// 	}
-	// 	
-	// 	// if (TileB.HasActor() || TileB.HasAIBooked)
-	// 	// {
-	// 	// 	// UE_LOG(LogHexAStar_NavMesh, Warning, TEXT("Coord: %s, HasAI: %d, HasAIBooked: %d"), *TileB.CubeCoord.ToString(), TileB.HasAI, TileB.HasAIBooked);
-	// 	// 	return false;
-	// 	// }
-	// 	//
-	// 	return true;
-	// }
-	
-	return true;
+	return NavMeshRef.WeakMapModel->CanTravelTo(NodeA, NodeB);
 }
 
 bool FGridPathFilter::WantsPartialSolution() const

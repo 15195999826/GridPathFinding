@@ -1,6 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "HGTypes.h"
@@ -18,6 +16,7 @@ enum class ETileTokenModifyType
 };
 
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FTileEnvUpdateDelegate, const FHCubeCoord&, const FTileEnvData& OldTileEnv, const FTileEnvData& NewTileEnv);
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FTileHeightUpdateDelegate, const FHCubeCoord&, const float OldHeight, const float NewHeight);
 
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FTileTokensUpdateDelegate, const FHCubeCoord& Coord, const int32 TokenIndex, const FSerializableTokenData& NewTokenData);
 
@@ -77,6 +76,15 @@ protected:
 	UPROPERTY()
 	bool IsBuilding{false};
 
+	// 缓存的边界值，避免重复计算
+	int32 CachedRowStart{0};
+	int32 CachedRowEnd{0};
+	int32 CachedColumnStart{0};
+	int32 CachedColumnEnd{0};
+
+	UPROPERTY()
+	TArray<UGridEnvironmentType*> TempEnvTypes;
+
 public:
 	FSimpleMulticastDelegate OnTilesDataBuildCancel;
 	/** 地图数据构建完成事件 */
@@ -84,6 +92,7 @@ public:
 
 	// Build时不会抛出事件， 仅Build完成后再修改才会Broadcast
 	FTileEnvUpdateDelegate OnTileEnvModify;
+	FTileHeightUpdateDelegate OnTileHeightModify;
 
 	FTileTokensUpdateDelegate OnTileTokensModify;
 	
@@ -95,7 +104,8 @@ public:
 	virtual void BuildTilesData(const FGridMapConfig& InMapConfig, const TMap<FHCubeCoord, FSerializableTile>& InTilesData);
 	
 	void UpdateTileEnv(const FSerializableTile& InTileData, bool bNotify = true);
-	
+	void UpdateTileHeight(const FHCubeCoord& InCoord, float NewHeight, bool bNotify = true);
+
 	// void ModifyTileTokens(ETileTokenModifyType ModifyType, const FHCubeCoord& InCoord, const int32 TokenIndex, const FSerializableTokenData& InTokenData, bool bNotify = true);
 
 	bool IsBuildingTilesData() const
@@ -108,6 +118,11 @@ public:
 		return &MapConfig;
 	}
 
+	const FGridMapConfig& GetMapConfig() const
+	{
+		return MapConfig;
+	}
+
 	const TArray<FTileInfo>* GetTilesArrayPtr() const
 	{
 		return &Tiles;
@@ -116,6 +131,17 @@ public:
 	const TMap<FHCubeCoord, FTileEnvData>* GetTileEnvMapPtr() const
 	{
 		return &TileEnvDataMap;
+	}
+
+	bool TryGetTileInfo(const FHCubeCoord& InCoord, FTileInfo& OutTileInfo) const
+	{
+		int32 Index = StableGetFullMapGridIterIndex(InCoord);
+		if (Tiles.IsValidIndex(Index))
+		{
+			OutTileInfo = Tiles[Index];
+			return true;
+		}
+		return false;
 	}
 
 	const FTileInfo* GetTilePtr(const FHCubeCoord& InCoord) const
@@ -157,10 +183,13 @@ public:
 	 */
 	void RemoveAndDestroyToken(const FHCubeCoord& InCoord, ATokenActor* InTokenActor);
 
+	void RemoveAndDestroyAllTokens();
+	
 	ATokenActor* GetToken(int32 InTokenID);
 
 	virtual void UpdateStandingActor(const FHCubeCoord& OldCoord, const FHCubeCoord& NewCoord, AActor* InActor);
-
+	virtual void RemoveStandingActor(AActor* InActor);
+	
 	void IntervalDeserializeTokens(const FHCubeCoord& InCoord, const TArray<FSerializableTokenData>& InTokensData, bool Clear = true);
 
 	bool TryGetStandingActor(const FHCubeCoord& Coord, AActor*& OutActor) const
@@ -181,20 +210,38 @@ public:
 	}
 
 	void BlockTileOnce(const FVector& InLocation);
+	void BlockTileOnce(const FHCubeCoord& InCoord);
 
 	void UnBlockTileOnce(const FVector& InLocation);
-	void UnBlockTileOnce(const FHCubeCoord& InCoord);
-
-	void UpdateTileHeight(const FHCubeCoord& InCoord, float NewHeight);
-
+	void UnBlockTileOnce(const FHCubeCoord& InCoord, bool bWarning = true);
+	
 	void SetTileCustomData(const FHCubeCoord& InCoord, const FName& Key, const FString& Value);
 	const FString& GetTileCustomData(const FHCubeCoord& InCoord, const FName& Key);
+
+	virtual bool CanTravelTo(int32 FromIndex, int32 ToIndex);
+
+	int32 GetTileHeight(const FHCubeCoord& InCoord);
+	int32 GetTileHeight(int32 TileIndex);
+	
+	virtual float GetHeightCost(int32 EndTileHeight, int32 StartTileHeight)
+	{
+		return FMath::Abs(EndTileHeight - StartTileHeight);
+	}
+
+	virtual float GetExtraPenalty(int32 Identifier, int32 EndTileHeight, int32 StartTileHeight)
+	{
+		return 0.f;
+	}
+
+	virtual double GetTraversalCost(int Identifier, int32 FromIndex, int32 ToIndex);
+
 protected:
 	/** 异步任务类，用于填充 Tiles 数组 */
 	class FBuildTilesDataTask : public FNonAbandonableTask
 	{
 	public:
-		FBuildTilesDataTask(UGridMapModel* InOwner, const TMap<FHCubeCoord, FSerializableTile>& InTilesData,
+		FBuildTilesDataTask(UGridMapModel* InOwner, TArray<UGridEnvironmentType*> InEnvTypes,
+		                    const TMap<FHCubeCoord, FSerializableTile>& InTilesData,
 		                    TSharedPtr<TArray<FTileInfo>> OutTiles,
 		                    TSharedPtr<TMap<FHCubeCoord, FTileEnvData>> OutEnvData);
 
@@ -214,6 +261,8 @@ protected:
 	private:
 		/** 持有对 UGridMapModel 的引用，以便在任务中访问 */
 		UGridMapModel* Owner;
+
+		TArray<UGridEnvironmentType*> EnvironmentTypes; // 用于存储环境类型的引用
 
 		/** 需要处理的原始数据 */
 		const TMap<FHCubeCoord, FSerializableTile>& TilesData;
@@ -247,8 +296,7 @@ public:
  	* 转换Cube坐标到世界坐标, 无视是否存在格子
  	* 六边形 : @see https://www.redblobgames.com/grids/hexagons/#hex-to-pixel
  	*/
-	UFUNCTION(BlueprintCallable, Category = "GridPathFinding")
-	FVector StableCoordToWorld(const FHCubeCoord& InCoord);
+	FVector StableCoordToWorld(const FHCubeCoord& InCoord, bool bIgnoreHeight = true);
 	FHCubeCoord StableWorldToCoord(const FVector& InWorldLocation);
 	FVector StableSnapToGridLocation(const FVector& InWorldLocation);
 
@@ -308,6 +356,8 @@ public:
 	int32 StableGetCoordChunkIndex(const FHCubeCoord& InCoord) const;
 
 	int32 GetDistance(const FHCubeCoord& A, const FHCubeCoord& B) const;
+	
+	int32 GetDistanceByIndex(const int32 A, const int32 B) const;
 
 	int32 GetNeighborDirection(const FHCubeCoord& From, const FHCubeCoord& To) const;
 
@@ -330,9 +380,11 @@ public:
 	{
 		return SixDirections;
 	}
+
+	virtual float GetTileHeightOffset(const FHCubeCoord& InCoord);
 private:
 	FSixDirections SixDirections{};
-
+	
 	FHCubeCoord HexCoordRound(const FHFractional& F);
 
 	// 邻居索引缓存 [NodeIndex][Direction] = NeighborIndex

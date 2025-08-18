@@ -20,11 +20,14 @@ AGridMapRenderer::AGridMapRenderer()
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);
 
-	GridWireframe = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("GridWireframe"));
-	GridWireframe->SetupAttachment(SceneRoot);
+	HighLightMask = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("HighLightMask"));
+	HighLightMask->SetupAttachment(SceneRoot);
 
 	BackgroundWireframe = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("BackgroundWireframe"));
 	BackgroundWireframe->SetupAttachment(SceneRoot);
+
+	TileCursorRenderer = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("TileCursorRenderer"));
+	TileCursorRenderer->SetupAttachment(SceneRoot);
 }
 
 // Called when the game starts or when spawned
@@ -46,11 +49,13 @@ void AGridMapRenderer::SetModel(UGridMapModel* InModel)
 	{
 		GridModel->OnTilesDataBuildCancel.RemoveAll(this);
 		GridModel->OnTileEnvModify.RemoveAll(this);
+		GridModel->OnTileHeightModify.RemoveAll(this);
 	}
 
 	GridModel = InModel;
 	GridModel->OnTilesDataBuildCancel.AddUObject(this, &AGridMapRenderer::OnTilesDataBuildCancel);
 	GridModel->OnTileEnvModify.AddUObject(this, &AGridMapRenderer::OnTileEnvUpdate);
+	GridModel->OnTileHeightModify.AddUObject(this, &AGridMapRenderer::OnTileHeightUpdate);
 }
 
 void AGridMapRenderer::RenderGridMap()
@@ -73,6 +78,9 @@ void AGridMapRenderer::RenderGridMap()
 	}
 	// }
 
+	// 清理高亮
+	ClearAllHighlightMasks();
+
 	if (RenderConfig.bDrawBackgroundWireframe)
 	{
 		DrawBackgroundWireframe();
@@ -92,6 +100,9 @@ void AGridMapRenderer::RenderGridMap()
 void AGridMapRenderer::ClearGridMap()
 {
 	BackgroundWireframe->ClearInstances();
+	
+	// 清理高亮
+	ClearAllHighlightMasks();
 
 	// if (RenderConfig.bDrawDefaultMap)
 	// {
@@ -124,7 +135,7 @@ void AGridMapRenderer::RenderTiles()
 			// 打印Coord
 			// UE_LOG(LogGridPathFinding, Log, TEXT("[AGridMapRenderer.RenderTiles] Render Tile at Coord: %s"), *Coord.ToString());
 			UpdateTileEnvRenderer(Coord, FTileEnvData::Invalid, *EnvData);
-
+			OnTileHeightUpdate(Coord, Tile.Height, Tile.Height);
 			RenderCount++;
 
 			if (RenderCount % 1000 == 0)
@@ -149,13 +160,52 @@ void AGridMapRenderer::HighLightBackground(const FHCubeCoord& InCoord, bool bHig
 	if (bHighLight)
 	{
 		SetWireFrameColor(BackgroundWireframe, InstanceIndex, RenderConfig.BackgroundWireframeHighlightColor,
-		                  RenderConfig.BackgroundDrawLocationOffset.Z, 0.2f);
+						  RenderConfig.BackgroundDrawLocationOffset.Z, 0.2f);
 	}
 	else
 	{
 		SetWireFrameColor(BackgroundWireframe, InstanceIndex, RenderConfig.BackgroundWireframeColor,
-		                  RenderConfig.BackgroundDrawLocationOffset.Z, 0.f);
+						  RenderConfig.BackgroundDrawLocationOffset.Z, 0.f);
 	}
+}
+
+void AGridMapRenderer::ClearAllHighlightMasks()
+{
+	if (HighLightMask)
+	{
+		HighLightMask->ClearInstances();
+		HighlightMaskIndexMap.Empty();
+	}
+}
+
+void AGridMapRenderer::SetCurrentTileCursor(const FVector& InLocation, float InScale, const FLinearColor& InColor)
+{
+	if (!RenderConfig.bDrawTileCursor)
+	{
+		return;
+	}
+	
+	TileCursorRenderer->ClearInstances();
+	
+	// 创建新的实例
+	FTransform NewCursorTransform = FTransform(
+		FRotator::ZeroRotator,
+		InLocation,
+		FVector::OneVector * InScale
+	);
+
+	// 添加实例
+	int32 InstanceIndex = TileCursorRenderer->AddInstance(NewCursorTransform, true);
+	
+	// 设置颜色
+	TArray<float> ColorData = {
+		InColor.R,
+		InColor.G,
+		InColor.B,
+		InColor.A
+	};
+	TileCursorRenderer->SetCustomData(InstanceIndex, ColorData);
+	
 }
 
 void AGridMapRenderer::OnTilesDataBuildCancel()
@@ -270,6 +320,42 @@ void AGridMapRenderer::OnTileEnvUpdate(const FHCubeCoord& InCoord, const FTileEn
 {
 }
 
+void AGridMapRenderer::OnTileHeightUpdate(const FHCubeCoord& InCoord, float oldHeight, float NewHeight)
+{
+	// 高度更新时， 更改对应地块的Mesh实例的Z Scale
+	// 实际上是更新Env的对应Index的高度
+	auto TileEnv = GridModel->GetTileEnvData(InCoord);
+	auto TileEnvTypeISM = GetEnvironmentComponent(TileEnv.EnvironmentType);
+	if (!TileEnvTypeISM)
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("未找到对应的ISM组件，无法更新高度"));
+		return;
+	}
+	
+	auto Index = EnvISMCIndexMap.Find(InCoord);
+	if (!Index)
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("无对应实例，无法更新高度"));
+		return;
+	}
+
+	// 获取当前实例的变换
+	FTransform InstanceTransform;
+	if (!TileEnvTypeISM->GetInstanceTransform(*Index, InstanceTransform, true))
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("无法获取实例变换"));
+		return;
+	}
+
+	// 更新Z轴缩放
+	float ScaleZ = NewHeight > 1 ?
+		(NewHeight - 1) * RenderConfig.HeightScale : 1.0f;
+	// 更新
+	InstanceTransform.SetScale3D(FVector(InstanceTransform.GetScale3D().X, InstanceTransform.GetScale3D().Y, ScaleZ));
+	// 设置新的变换
+	TileEnvTypeISM->UpdateInstanceTransform(*Index, InstanceTransform, true);
+}
+
 void AGridMapRenderer::InitializeEnvironmentComponents()
 {
 	// 清空现有组件
@@ -326,7 +412,7 @@ void AGridMapRenderer::InitializeEnvironmentComponents()
 		NewComponent->SetMaterial(0, EnvironmentType->BuildGridMapMaterial.LoadSynchronous());
 		NewComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		NewComponent->SetupAttachment(SceneRoot);
-		NewComponent->SetNumCustomDataFloats(3); // 第一个用于区分使用哪个Category， 第二用于指向Texture2dArray的index；第三个值指向Tint值
+		NewComponent->SetNumCustomDataFloats(5); // 第一个用于区分使用哪个Category， 第二用于指向Texture2dArray的index；第三个值指向Tint值
 #if WITH_EDITOR
 		NewComponent->CreationMethod = EComponentCreationMethod::Native; // 关键设置
 		NewComponent->SetFlags(RF_Transactional); // 使组件可在编辑器中序列化
@@ -411,8 +497,9 @@ void AGridMapRenderer::UpdateTileEnvRenderer(FHCubeCoord Coord, const FTileEnvDa
 			OldEnvTypeISM->SetCustomData(Index, {
 				                             DefaultCustomData.TextureArrayCategory,
 				                             static_cast<float>(InNewEnvData.TextureIndex),
-											 DefaultCustomData.DefaultTint,
-				                             DefaultCustomData.Roughness
+				                             DefaultCustomData.DefaultTint,
+				                             DefaultCustomData.Roughness,
+				                             DefaultCustomData.NormalIntensity
 			                             });
 			return;
 		}
@@ -449,7 +536,8 @@ void AGridMapRenderer::UpdateTileEnvRenderer(FHCubeCoord Coord, const FTileEnvDa
 	NewEnvISM->SetCustomData(Index, {
 		                         DefaultCustomData.TextureArrayCategory, static_cast<float>(InNewEnvData.TextureIndex),
 		                         DefaultCustomData.DefaultTint,
-		                         DefaultCustomData.Roughness
+		                         DefaultCustomData.Roughness,
+		                         DefaultCustomData.NormalIntensity,
 	                         });
 	// UE_LOG(LogGridPathFinding, Log, TEXT("[AGridMapRenderer.UpdateTileEnvRenderer] 更新地块: %s, 新环境类型: %s"),
 	//        *Coord.ToString(), *NewEnvType.ToString());
@@ -614,4 +702,101 @@ void AGridMapRenderer::DebugDrawChunks()
 		       *UEnum::GetValueAsString(MapConfig->DrawMode));
 		break;
 	}
+}
+void AGridMapRenderer::AddHighlightMask(const FHCubeCoord& InCoord, const FLinearColor& HighlightColor)
+{
+	if (!HighLightMask)
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("HighLightMask component is nullptr"));
+		return;
+	}
+
+	// 如果已经存在高亮，更新颜色
+	if (HighlightMaskIndexMap.Contains(InCoord))
+	{
+		int32 InstanceIndex = HighlightMaskIndexMap[InCoord];
+		TArray<float> ColorData = {
+			HighlightColor.R,
+			HighlightColor.G,
+			HighlightColor.B,
+			HighlightColor.A
+		};
+		HighLightMask->SetCustomData(InstanceIndex, ColorData);
+		UE_LOG(LogGridPathFinding, VeryVerbose, TEXT("Updated highlight mask color at coord %s"), *InCoord.ToString());
+		return;
+	}
+
+	// 计算位置和变换
+	FVector TileLocation = GridModel->StableCoordToWorld(InCoord);
+	auto TileHeight = GridModel->GetTileHeight(InCoord);
+	FRotator GridRotator = GetGridRotator();
+	
+	// 计算缩放
+	float Scale = 1.0f;
+	auto MapConfig = GridModel->GetMapConfigPtr();
+	if (MapConfig->MapType == EGridMapType::HEX_STANDARD)
+	{
+		Scale = MapConfig->HexGridRadius / RenderConfig.MaskBaseSize;
+	}
+
+	// 创建变换
+	FTransform HighlightTransform = FTransform(
+		GridRotator,
+		TileLocation + RenderConfig.HighlightMaskLocationOffset + (TileHeight - 1) * RenderConfig.HighlightMaskHeightOffset,
+		FVector::OneVector * Scale
+	);
+
+	// 添加实例
+	int32 InstanceIndex = HighLightMask->AddInstance(HighlightTransform, true);
+	
+	// 设置颜色
+	TArray<float> ColorData = {
+		HighlightColor.R,
+		HighlightColor.G,
+		HighlightColor.B,
+		HighlightColor.A
+	};
+	HighLightMask->SetCustomData(InstanceIndex, ColorData);
+
+	// 保存映射
+	HighlightMaskIndexMap.Add(InCoord, InstanceIndex);
+
+	UE_LOG(LogGridPathFinding, VeryVerbose, TEXT("Added highlight mask at coord %s with color (%f, %f, %f, %f)"),
+		*InCoord.ToString(), HighlightColor.R, HighlightColor.G, HighlightColor.B, HighlightColor.A);
+}
+
+void AGridMapRenderer::RemoveHighlightMask(const FHCubeCoord& InCoord)
+{
+	if (!HighLightMask)
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("HighLightMask component is nullptr"));
+		return;
+	}
+
+	// 查找实例索引
+	int32* InstanceIndexPtr = HighlightMaskIndexMap.Find(InCoord);
+	if (!InstanceIndexPtr)
+	{
+		UE_LOG(LogGridPathFinding, VeryVerbose, TEXT("No highlight mask found at coord %s"), *InCoord.ToString());
+		return;
+	}
+
+	int32 InstanceIndex = *InstanceIndexPtr;
+	
+	// 移除实例
+	HighLightMask->RemoveInstance(InstanceIndex);
+	
+	// 更新映射索引（因为RemoveInstance会影响后续实例的索引）
+	HighlightMaskIndexMap.Remove(InCoord);
+	
+	// 更新其他实例的索引
+	for (auto& Pair : HighlightMaskIndexMap)
+	{
+		if (Pair.Value > InstanceIndex)
+		{
+			Pair.Value--;
+		}
+	}
+
+	UE_LOG(LogGridPathFinding, VeryVerbose, TEXT("Removed highlight mask at coord %s"), *InCoord.ToString());
 }

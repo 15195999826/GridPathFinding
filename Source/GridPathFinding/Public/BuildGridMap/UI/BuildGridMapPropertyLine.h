@@ -32,7 +32,7 @@ public:
 	UPROPERTY(BlueprintReadOnly, meta=(BindWidget))
 	TObjectPtr<UCheckBox> CheckBox;
 	
-	void InitPropertyLine(const FSerializableTokenProperty& InProperty);
+	void InitPropertyLine(const FSerializableTokenProperty& InPropertyLine);
 	void Clean();
 
 	UPROPERTY(BlueprintCallable)
@@ -40,6 +40,13 @@ public:
 
 	UFUNCTION(BlueprintCallable, BlueprintPure)
 	FString GetValueString();
+
+	const FName& GetPropertyName() const
+	{
+		return PropertyName;
+	}
+
+	void UpdateProperty(const FSerializableTokenProperty& InPropertyData);
 	
 protected:
 	UFUNCTION(BlueprintImplementableEvent)
@@ -65,6 +72,7 @@ protected:
 
 	UFUNCTION(BlueprintImplementableEvent)
 	FString GetCheckBoxValue();
+	
 	
 	UPROPERTY(BlueprintReadOnly)
 	FName PropertyName;

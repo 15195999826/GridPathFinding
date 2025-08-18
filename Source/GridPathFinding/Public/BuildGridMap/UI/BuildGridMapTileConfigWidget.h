@@ -9,6 +9,7 @@
 #include "Types/SerializableTile.h"
 #include "BuildGridMapTileConfigWidget.generated.h"
 
+class USpinBox;
 class UVerticalBox;
 class UBuildGridMapTokenActorPanel;
 class UButton;
@@ -31,6 +32,9 @@ public:
 	
 	UPROPERTY(BlueprintReadOnly, meta=(BindWidget))
 	TObjectPtr<UComboBoxString> EnvComboBox;
+	
+	UPROPERTY(BlueprintReadOnly, meta=(BindWidget))
+	TObjectPtr<USpinBox> HeightSpinBox;
 	
 	UPROPERTY(BlueprintReadOnly, meta=(BindWidget))
 	TObjectPtr<UEditableTextBox> EnvTextureIndexTextBox;
@@ -60,6 +64,17 @@ public:
 	void IntervalCreateTokenActorPanel(int32 InIndex, const FSerializableTokenData& InTokenData);
 	void IntervalUpdateTokenActorPanel(int InIndex, const FSerializableTokenData& InTokenData);
 	void IntervalDeleteTokenActorPanel(int32 InIndex);
+
+	// UI上刷新PropertyArrayPenel
+	void IntervalUpdateTokenPropertyArray(const int32 InTokenIndex,const int32 InFeatureIndex,const FName& InArrayName,
+		const FSerializableTokenPropertyArray& InPropertyArrayData );
+
+	// UI上刷新Property(单属性)
+	void IntervalUpdateTokenProperty(const int32 InTokenIndex,const int32 InFeatureIndex,const FSerializableTokenProperty& InPropertyData);
+
+	// UI上刷新Property(数组)
+	void IntervalUpdateTokenPropertyInArray(const int32 InTokenIndex,const int32 InFeatureIndex,const FName& InArrayName,
+		const int32 InArrayIndex,const FSerializableTokenProperty& InPropertyData);
 	
 private:
 	UPROPERTY()

@@ -3,12 +3,7 @@
 
 #include "BuildGridMap/UI/BuildGridTileActorConfigWidget.h"
 
-#include "GridMapModel.h"
 #include "GridPathFinding.h"
-#include "GridPathFindingBlueprintFunctionLib.h"
-#include "GridPathFindingSettings.h"
-#include "HGTypes.h"
-#include "IContentBrowserSingleton.h"
 #include "JsonObjectConverter.h"
 #include "TokenActor.h"
 #include "BuildGridMap/BuildGridMapPlayerController.h"

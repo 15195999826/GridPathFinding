@@ -39,7 +39,6 @@ public class GridPathFinding : ModuleRules
 				"JsonUtilities",
 				"InputCore",
 				"ApplicationCore",
-				"UnrealEd",
 				// ... add other public dependencies that you statically link with here ...
 			}
 		);
@@ -62,5 +61,9 @@ public class GridPathFinding : ModuleRules
 				// ... add any modules that your module loads dynamically here ...
 			}
 			);
+		
+		if (Target.bBuildEditor) {
+			PublicDependencyModuleNames.AddRange(new string[]{"UnrealEd"});
+		}
 	}
 }

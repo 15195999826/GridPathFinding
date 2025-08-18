@@ -2,6 +2,8 @@
 
 
 #include "BuildGridMap/Command/BuildGridMapAddTokenCommand.h"
+
+#include "GridPathFinding.h"
 #include "BuildGridMap/BuildGridMapGameMode.h"
 #include "BuildGridMap/UI/BuildGridMapWindow.h"
 #include "BuildGridMap/UI/BuildGridMapTileConfigWidget.h"
@@ -14,9 +16,9 @@ void UBuildGridMapAddTokenCommand::Initialize(const FHCubeCoord& InCoord)
 bool UBuildGridMapAddTokenCommand::Execute()
 {
 	auto MyGameMode = GetWorld()->GetAuthGameMode<ABuildGridMapGameMode>();
-	MyGameMode->MarkEditingTilesDirty(SelectedCoord);
-
 	TMap<FHCubeCoord, FSerializableTile>& EditingTiles = MyGameMode->GetMutEditingTiles();
+	
+	MyGameMode->MarkEditingTilesDirty(SelectedCoord);
 	if (!EditingTiles.Contains(SelectedCoord))
 	{
 		FSerializableTile NewTile;
@@ -24,7 +26,19 @@ bool UBuildGridMapAddTokenCommand::Execute()
 		MyGameMode->GetMutEditingTiles().Add(SelectedCoord, NewTile);
 		HasCoordFlag = false;
 	}
-
+	else
+	{
+		int32 TokenNum = EditingTiles[SelectedCoord].SerializableTokens.Num();
+		if (TokenNum > 0)
+		{
+			if (EditingTiles[SelectedCoord].SerializableTokens[TokenNum-1].TokenClass == nullptr)
+			{
+				UE_LOG(LogGridPathFinding, Error, TEXT("地块 %s 的Token数组存在空的TokenActor，无法添加新的Token"),
+					*SelectedCoord.ToString());
+				return false;
+			}
+		}
+	}
 	// 创建一个新的SerializableToken
 	FSerializableTokenData NewTokenData;
 	EditingTiles[SelectedCoord].SerializableTokens.Add(NewTokenData);

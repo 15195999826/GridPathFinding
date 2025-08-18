@@ -13,6 +13,7 @@
 #include "Components/EditableTextBox.h"
 #include "Components/TextBlock.h"
 #include "BuildGridMap/UI/BuildGridMapTokenActorPanel.h"
+#include "Components/SpinBox.h"
 #include "Components/VerticalBox.h"
 
 void UBuildGridMapTileConfigWidget::NativeConstruct()
@@ -65,6 +66,7 @@ void UBuildGridMapTileConfigWidget::BindSingleTileCoord(FHCubeCoord SelectedCoor
 		EnvComboBox->SetSelectedIndex(0);
 	}
 	EnvTextureIndexTextBox->SetText(FText::FromString(FString::Printf(TEXT("%d"), EditingTile.TileEnvData.TextureIndex)));
+	HeightSpinBox->SetValue(EditingTile.Height);
 
 	auto CurrentTokenActorPanels = TokenActorPanelRoot->GetAllChildren();
 	for (UWidget* Child : CurrentTokenActorPanels)
@@ -99,6 +101,8 @@ void UBuildGridMapTileConfigWidget::BindSingleTileData(const FSerializableTile& 
 	{
 		EnvComboBox->SetSelectedIndex(0);
 	}
+
+	HeightSpinBox->SetValue(InTileData.Height);
 	EnvTextureIndexTextBox->SetText(FText::FromString(FString::Printf(TEXT("%d"), InTileData.TileEnvData.TextureIndex)));
 }
 
@@ -169,3 +173,70 @@ void UBuildGridMapTileConfigWidget::IntervalDeleteTokenActorPanel(int32 InIndex)
 		UE_LOG(LogGridPathFinding, Warning, TEXT("[UBuildGridMapTileConfigWidget.IntervalDeleteTokenActorPanel] Index out of range: %d"), InIndex);
 	}
 }
+
+void UBuildGridMapTileConfigWidget::IntervalUpdateTokenPropertyArray(const int32 InTokenIndex, const int32 InFeatureIndex,
+	const FName& InArrayName, const FSerializableTokenPropertyArray& InPropertyArrayData)
+{
+	auto CurrentTokenActorPanels = TokenActorPanelRoot->GetAllChildren();
+	if (CurrentTokenActorPanels.IsValidIndex(InTokenIndex))
+	{
+		auto TokenActorPanel = Cast<UBuildGridMapTokenActorPanel>(CurrentTokenActorPanels[InTokenIndex]);
+		if (TokenActorPanel)
+		{
+			TokenActorPanel->UpdateTokenPropertyArray(InFeatureIndex, InArrayName, InPropertyArrayData);
+		}
+		else
+		{
+			UE_LOG(LogGridPathFinding, Error, TEXT("[UBuildGridMapTileConfigWidget.IntervalUpdateTokenPropertyArray] TokenActorPanel not found at index: %d"), InTokenIndex);
+		}
+	}
+	else
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[UBuildGridMapTileConfigWidget.IntervalUpdateTokenPropertyArray] Index out of range: %d"), InTokenIndex);
+	}
+}
+
+void UBuildGridMapTileConfigWidget::IntervalUpdateTokenProperty(const int32 InTokenIndex, const int32 InFeatureIndex,
+	const FSerializableTokenProperty& InPropertyData)
+{
+	auto CurrentTokenActorPanels = TokenActorPanelRoot->GetAllChildren();
+	if (CurrentTokenActorPanels.IsValidIndex(InTokenIndex))
+	{
+		auto TokenActorPanel = Cast<UBuildGridMapTokenActorPanel>(CurrentTokenActorPanels[InTokenIndex]);
+		if (TokenActorPanel)
+		{
+			TokenActorPanel->UpdateTokenProperty(InFeatureIndex,InPropertyData);
+		}
+		else
+		{
+			UE_LOG(LogGridPathFinding, Error, TEXT("[UBuildGridMapTileConfigWidget.IntervalUpdateTokenProperty] TokenActorPanel not found at index: %d"), InTokenIndex);
+		}
+	}
+	else
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[UBuildGridMapTileConfigWidget.IntervalUpdateTokenProperty] Index out of range: %d"), InTokenIndex);
+	}
+}
+
+void UBuildGridMapTileConfigWidget::IntervalUpdateTokenPropertyInArray(const int32 InTokenIndex,
+	const int32 InFeatureIndex, const FName& InArrayName, const int32 InArrayIndex, const FSerializableTokenProperty& InPropertyData)
+{
+	auto CurrentTokenActorPanels = TokenActorPanelRoot->GetAllChildren();
+	if (CurrentTokenActorPanels.IsValidIndex(InTokenIndex))
+	{
+		auto TokenActorPanel = Cast<UBuildGridMapTokenActorPanel>(CurrentTokenActorPanels[InTokenIndex]);
+		if (TokenActorPanel)
+		{
+			TokenActorPanel->UpdateTokenPropertyInArray(InFeatureIndex, InArrayName,InArrayIndex,InPropertyData );
+		}
+		else
+		{
+			UE_LOG(LogGridPathFinding, Error, TEXT("[UBuildGridMapTileConfigWidget.IntervalUpdateTokenPropertyInArray] TokenActorPanel not found at index: %d"), InTokenIndex);
+		}
+	}
+	else
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[UBuildGridMapTileConfigWidget.IntervalUpdateTokenPropertyInArray] Index out of range: %d"), InTokenIndex);
+	}
+}
+

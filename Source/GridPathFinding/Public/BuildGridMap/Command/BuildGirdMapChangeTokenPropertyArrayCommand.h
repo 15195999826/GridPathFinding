@@ -3,28 +3,28 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "UObject/Object.h"
-#include "Types/HCubeCoord.h"
 #include "IGridMapCommand.h"
-#include "BuildGirdMapChangeTokenFeaturePropertyCommand.generated.h"
+#include "Types/HCubeCoord.h"
+#include "UObject/Object.h"
+#include "BuildGirdMapChangeTokenPropertyArrayCommand.generated.h"
 
 /**
  * 
  */
-
 UCLASS()
-class GRIDPATHFINDING_API UBuildGirdMapChangeTokenFeaturePropertyCommand : public UObject, public IGridMapCommand
+class GRIDPATHFINDING_API UBuildGirdMapChangeTokenPropertyArrayCommand : public UObject, public IGridMapCommand
 {
 	GENERATED_BODY()
 
 public:
-	void Initialize(const FHCubeCoord& InCoord, int InActorIndex, int InFeatureIndex, const FName& InPropertyName,
-	                const FString& InValue);
+	void Initialize(const FHCubeCoord& InCoord, const int InActorIndex,
+		const int InFeatureIndex, const FName& InPropertyArrayName,
+		const int InArrayIndex,const FName& InPropertyName, const FString& InValue);
 
 	virtual bool Execute() override;
 	virtual bool Undo() override;
 	virtual FString GetDescription() const override;
-
+	
 private:
 	// 选中地块的坐标
 	FHCubeCoord SelectedCoord;
@@ -38,12 +38,19 @@ private:
 	// 更改的Property索引位置
 	int PropertyIndex;
 
+	// 更改的Property数组索引位置
+	int ArrayIndex;
+
+	// 更改的数据数组名称
+	FName PropertyArrayName;
+	
 	// 更改的数据名称
 	FName PropertyName;
-
+	
 	// 新的TokenFeatureProperty数据
 	FString NewValue;
 
 	// 旧的TokenFeatureProperty数据
 	FString OldValue;
+	
 };

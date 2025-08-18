@@ -23,12 +23,11 @@ struct FGridMapRenderConfig
 	{
 	}
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="绘制Cursor"))
+	bool bDrawTileCursor{false};
+
 	// UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="使用默认地图绘制方式"))
 	// bool bDrawDefaultMap{true};
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="绘制Wireframe"))
-	bool bDrawWireframe{true};
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="绘制背景Wireframe"))
 	bool bDrawBackgroundWireframe{true};
 
@@ -40,6 +39,21 @@ struct FGridMapRenderConfig
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="背景Wireframe默认绘制偏移", EditCondition="bDrawBackgroundWireframe", EditConditionHides))
 	FVector BackgroundDrawLocationOffset = FVector(0.f, 0.f, 0.1f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="高亮Mask绘制偏移"))
+	FVector HighlightMaskLocationOffset = FVector(0.f, 0.f, 0.3f);
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="高亮Mask每层高度偏移"))
+	FVector HighlightMaskHeightOffset = FVector(0.f, 0.f, 1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="高亮Mask默认颜色"))
+	FLinearColor DefaultHighlightColor{FLinearColor::Red};
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="高亮Mask基础尺寸"))
+	float MaskBaseSize = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="高度比例"))
+	float HeightScale = 1.0f;
 };
 
 /**
@@ -80,10 +94,13 @@ protected:
 	TObjectPtr<USceneComponent> SceneRoot;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
-	TObjectPtr<UInstancedStaticMeshComponent> GridWireframe;
+	TObjectPtr<UInstancedStaticMeshComponent> HighLightMask;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
 	TObjectPtr<UInstancedStaticMeshComponent> BackgroundWireframe;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
+	TObjectPtr<UInstancedStaticMeshComponent> TileCursorRenderer;
 
 	FDelegateHandle TilesDataBuildOverHandle;
 
@@ -94,7 +111,19 @@ public:
 
 	virtual void ClearGridMap();
 
+	// 使用WireFrame高亮
 	void HighLightBackground(const FHCubeCoord& InCoord, bool bHighLight);
+	
+	// Mask高亮相关方法
+	void AddHighlightMask(const FHCubeCoord& InCoord, const FLinearColor& HighlightColor);
+
+	void RemoveHighlightMask(const FHCubeCoord& InCoord);
+
+	// 清理所有Mask高亮
+	void ClearAllHighlightMasks();
+
+	// 设置当前光标位置
+	void SetCurrentTileCursor(const FVector& InLocation, float InScale, const FLinearColor& InColor);
 
 protected:
 	virtual void RenderTiles();
@@ -111,6 +140,8 @@ protected:
 
 	virtual void OnTileEnvUpdate(const FHCubeCoord& InCoord, const FTileEnvData& OldTileInfo, const FTileEnvData& NewTileInfo);
 
+	void OnTileHeightUpdate(const FHCubeCoord& InCoord, float oldHeight, float NewHeight);
+	
 private:
 	void OnTilesDataBuildCancel();
 	void OnTilesDataBuildComplete();
@@ -136,7 +167,7 @@ protected:
 	UPROPERTY()
 	TMap<FHCubeCoord, int32> EnvISMCIndexMap;
 
-	UPROPERTY()
+	UPROPERTY(EditAnywhere, Category=Config, meta=(DisplayName="默认Lit"))
 	float DefaultTint = 1.0f;
 	
 	// 为每种环境类型创建对应的ISM组件
@@ -148,6 +179,12 @@ protected:
 
 	virtual void UpdateTileEnvRenderer(FHCubeCoord Coord, const FTileEnvData& InOldEnvData, const FTileEnvData& InNewEnvData);
 	// ------ 默认环境Mesh绘制功能 End ----------
+
+	// ------- HighLightMask 功能 Start ----------
+	// 坐标到 HighLightMask 实例索引的映射
+	UPROPERTY()
+	TMap<FHCubeCoord, int32> HighlightMaskIndexMap;
+	// ------- HighLightMask 功能 End ----------
 
 private:
 	// 调试Chunk功能分区是否正确

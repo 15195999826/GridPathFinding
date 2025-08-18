@@ -15,19 +15,19 @@ void UBuildGridMapDeleteTokenCommand::Initialize(const FHCubeCoord& InCoord, int
 	SelectedCoord = InCoord;
 	DeleteSerializedTokenIndex = InSerializedTokenIndex;
 
-	auto MyGameMode = GetWorld()->GetAuthGameMode<ABuildGridMapGameMode>();
-	auto ExistingTokenActor = MyGameMode->GridMapModel->GetTokenByIndex(SelectedCoord, DeleteSerializedTokenIndex, false);
+	const auto MyGameMode = GetWorld()->GetAuthGameMode<ABuildGridMapGameMode>();
+	const auto ExistingTokenActor = MyGameMode->GridMapModel->GetTokenByIndex(SelectedCoord, DeleteSerializedTokenIndex, false);
 	if (ExistingTokenActor)
 	{
 		//保存TokenFeaturesComponent数据
 		HasTokenFlag = true;
-		auto TokenFeatures = ExistingTokenActor->GetComponentsByInterface(UTokenFeatureInterface::StaticClass());
-		for (UActorComponent* Component : TokenFeatures)
+		const auto TokenFeatures = ExistingTokenActor->GetComponentsByInterface(UTokenFeatureInterface::StaticClass());
+		for (const UActorComponent* Component : TokenFeatures)
 		{
 			FSerializableTokenFeature FeatureData;
 			FeatureData.FeatureClass = Component->GetClass();
-			auto FeatureInterface = Cast<ITokenFeatureInterface>(Component);
-			FeatureData.Properties = FeatureInterface->SerializeFeatureProperties();
+			const auto FeatureInterface = Cast<ITokenFeatureInterface>(Component);
+			FeatureData.Properties = FeatureInterface->SerializeFeatureProperties().Properties;
 			OldTokenData.Features.Add(FeatureData);
 		}
 		//保存TokenActor类
@@ -112,7 +112,7 @@ bool UBuildGridMapDeleteTokenCommand::Undo()
 			for (UActorComponent* Component : TokenFeatures)
 			{
 				auto FeatureInterface = Cast<ITokenFeatureInterface>(Component);
-				FeatureInterface->DeserializeFeatureProperties(Properties.Properties);
+				FeatureInterface->DeserializeFeatureProperties(Properties);
 			}
 		}
 		// 保存TokenActor和SerializableTokenData的关联, 通过在MapModel中按照相同的Index保存指针来实现

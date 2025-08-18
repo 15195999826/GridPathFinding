@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "TokenFeatureInterface.h"
 #include "Components/StaticMeshComponent.h"
+
 #include "TokenMeshFeatureComponent.generated.h"
 
 USTRUCT()
@@ -39,11 +40,15 @@ private:
 public:
 	UTokenMeshFeatureComponent(const FObjectInitializer& ObjectInitializer);
 	
-	virtual TArray<FSerializableTokenProperty> SerializeFeatureProperties() const override;
+	virtual FSerializableTokenFeature SerializeFeatureProperties() const override;
 
-	virtual void DeserializeFeatureProperties(const TArray<FSerializableTokenProperty>& Properties) override;
+	virtual void DeserializeFeatureProperties(const FSerializableTokenFeature& TokenFeature) override;
 
 	virtual void UpdateFeatureProperty(const FSerializableTokenProperty& InNewProperty) override;
 
 	virtual void InitGameplayFeature() override{};
+
+	virtual TArray<FSerializableTokenProperty> CreatePropertyArray(const FName& PropertyArrayName) override;
+	
+	virtual void UpdateFeaturePropertyArray(const TArray<FSerializableTokenProperty>& InNewPropertyArray,const FName& PropertyArrayName,const int32 UpdateIndex) override;
 };

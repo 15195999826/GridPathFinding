@@ -36,6 +36,13 @@ void UGridMapModel::BuildTilesData(const FGridMapConfig& InMapConfig,
 {
 	IsBuilding = true;
 	MapConfig = InMapConfig;
+	
+	// 初始化缓存的边界值
+	CachedRowStart = -FMath::FloorToInt(MapConfig.MapSize.X / 2.f);
+	CachedRowEnd = FMath::CeilToInt(MapConfig.MapSize.X / 2.f);
+	CachedColumnStart = -FMath::FloorToInt(MapConfig.MapSize.Y / 2.f);
+	CachedColumnEnd = FMath::CeilToInt(MapConfig.MapSize.Y / 2.f);
+	
 	SixDirections.DirVectors.Empty();
 	if (MapConfig.MapType == EGridMapType::RECTANGLE_SIX_DIRECTION || MapConfig.MapType == EGridMapType::HEX_STANDARD)
 	{
@@ -86,9 +93,25 @@ void UGridMapModel::BuildTilesData(const FGridMapConfig& InMapConfig,
 		TempTilesPtr->Add(FTileInfo(Coord));
 		TempEnvDataPtr->Add(Coord, FTileEnvData());
 	});
+
+	auto GSettings = GetDefault<UGridPathFindingSettings>();
+	TempEnvTypes.Empty();
+	for (const auto& EnvType : GSettings->EnvironmentTypes)
+	{
+		TempEnvTypes.Add(EnvType.LoadSynchronous());
+	}
+
+	// 打印TempEnvTypes是否存在空值
+	for (const auto& EnvType : TempEnvTypes)
+	{
+		if (!EnvType)
+		{
+			UE_LOG(LogGridPathFinding, Error, TEXT("TempEnvTypes contains a null pointer!"));
+		}
+	}
 	
 	// 创建异步任务
-	BuildTilesDataTask = MakeShared<FAsyncTask<FBuildTilesDataTask>>(this, InTilesData, TempTilesPtr, TempEnvDataPtr);
+	BuildTilesDataTask = MakeShared<FAsyncTask<FBuildTilesDataTask>>(this, TempEnvTypes, InTilesData, TempTilesPtr, TempEnvDataPtr);
 
 	// 设置任务完成的回调，将结果复制到 Tiles 数组
 	BuildTilesDataTask->GetTask().OnComplete = [this, TempTilesPtr, TempEnvDataPtr]
@@ -101,6 +124,12 @@ void UGridMapModel::BuildTilesData(const FGridMapConfig& InMapConfig,
 			TileEnvDataMap = MoveTemp(*TempEnvDataPtr);
 			UE_LOG(LogGridPathFinding, Log, TEXT("BuildTilesData completed successfully with %d tiles, EnvData Num: %d"),
 			       Tiles.Num(), TileEnvDataMap.Num());
+
+			// 打印各个Tile的Cost
+			// for (const auto& Tile : Tiles)
+			// {
+			// 	UE_LOG(LogGridPathFinding, Log, TEXT("Tile Coord: %s, Cost: %f"), *Tile.CubeCoord.ToString(), Tile.Cost);
+			// }
 		}
 		else
 		{
@@ -109,6 +138,7 @@ void UGridMapModel::BuildTilesData(const FGridMapConfig& InMapConfig,
 
 		// 触发地图数据更新完成事件
 		IsBuilding = false;
+		TempEnvTypes.Empty();
 		OnTilesDataBuildComplete.Broadcast();
 	};
 
@@ -127,6 +157,25 @@ void UGridMapModel::UpdateTileEnv(const FSerializableTile& InTileData, bool bNot
 	if (bNotify)
 	{
 		OnTileEnvModify.Broadcast(InTileData.Coord, OldTileEnv, TileEnvDataMap[InTileData.Coord]);
+	}
+}
+
+void UGridMapModel::UpdateTileHeight(const FHCubeCoord& InCoord, float NewHeight, bool bNotify)
+{
+	auto Index = StableGetFullMapGridIterIndex(InCoord);
+
+	if (!Tiles.IsValidIndex(Index))
+	{
+		return;
+	}
+
+	
+	auto& TileInfo = Tiles[Index];
+	auto OldHeight = TileInfo.Height;
+	TileInfo.Height = NewHeight;
+	if (bNotify)
+	{
+		OnTileHeightModify.Broadcast(InCoord, OldHeight, TileInfo.Height);
 	}
 }
 
@@ -227,6 +276,18 @@ void UGridMapModel::RemoveAndDestroyToken(const FHCubeCoord& InCoord, ATokenActo
 	UE_LOG(LogGridPathFinding, Error, TEXT("[RemoveToken] Coord %s 不存在任何Token"), *InCoord.ToString());
 }
 
+void UGridMapModel::RemoveAndDestroyAllTokens()
+{
+	for (auto& Pair :TokenMap)
+	{
+		Pair.Value->OnRemoveFromMap.Broadcast(Pair.Value);
+		Pair.Value->Destroy();
+	}
+	TokenMap.Empty();
+	Coord2TokenIDsMap.Empty();
+	UE_LOG(LogGridPathFinding, Log, TEXT("已清除地图上所有的Token"));
+}
+
 ATokenActor* UGridMapModel::GetToken(int32 InTokenID)
 {
 	if (TokenMap.Contains(InTokenID))
@@ -255,8 +316,29 @@ void UGridMapModel::UpdateStandingActor(const FHCubeCoord& OldCoord, const FHCub
 	StandingActors.Add(NewCoord, InActor);
 }
 
+void UGridMapModel::RemoveStandingActor(AActor* InActor)
+{
+	auto Coord = StableWorldToCoord(InActor->GetActorLocation());
+	if (StandingActors.Contains(Coord))
+	{
+		if (StandingActors[Coord] == InActor)
+		{
+			StandingActors.Remove(Coord);
+		}
+		else
+		{
+			UE_LOG(LogGridPathFinding, Warning, TEXT("[RemoveStandingActor] Actor at %s is not the same as %s"),
+			       *Coord.ToString(), *InActor->GetName());
+		}
+	}
+	else
+	{
+		UE_LOG(LogGridPathFinding, Warning, TEXT("[RemoveStandingActor] No actor found at coord %s"), *Coord.ToString());
+	}
+}
+
 void UGridMapModel::IntervalDeserializeTokens(const FHCubeCoord& InCoord,
-	const TArray<FSerializableTokenData>& InTokensData, bool Clear)
+                                              const TArray<FSerializableTokenData>& InTokensData, bool Clear)
 {
 	// 清空当前的
 	if (Clear)
@@ -327,27 +409,10 @@ void UGridMapModel::IntervalDeserializeTokens(const FHCubeCoord& InCoord,
 void UGridMapModel::BlockTileOnce(const FVector& InLocation)
 {
 	auto Coord = StableWorldToCoord(InLocation);
-	auto Index = StableGetFullMapGridIterIndex(Coord);
-
-	if (!Tiles.IsValidIndex(Index))
-	{
-		UE_LOG(LogGridPathFinding, Error, TEXT("[UpdateTileInfo] Invalid tile index: %d for coord %s"),
-		       Index, *Coord.ToString());
-		return;
-	}
-
-
-	auto& TileInfo = Tiles[Index];
-	TileInfo.BlockCount = TileInfo.BlockCount + 1;
-}
-
-void UGridMapModel::UnBlockTileOnce(const FVector& InLocation)
-{
-	auto Coord = StableWorldToCoord(InLocation);
 	UnBlockTileOnce(Coord);
 }
 
-void UGridMapModel::UnBlockTileOnce(const FHCubeCoord& InCoord)
+void UGridMapModel::BlockTileOnce(const FHCubeCoord& InCoord)
 {
 	auto Index = StableGetFullMapGridIterIndex(InCoord);
 
@@ -360,23 +425,32 @@ void UGridMapModel::UnBlockTileOnce(const FHCubeCoord& InCoord)
 
 
 	auto& TileInfo = Tiles[Index];
-	if (TileInfo.BlockCount > 0)
-	{
-		TileInfo.BlockCount = TileInfo.BlockCount - 1;
-	}
+	TileInfo.AddBlockOnce();
 }
 
-void UGridMapModel::UpdateTileHeight(const FHCubeCoord& InCoord, float NewHeight)
+void UGridMapModel::UnBlockTileOnce(const FVector& InLocation)
+{
+	auto Coord = StableWorldToCoord(InLocation);
+	UnBlockTileOnce(Coord);
+}
+
+void UGridMapModel::UnBlockTileOnce(const FHCubeCoord& InCoord, bool bWarning)
 {
 	auto Index = StableGetFullMapGridIterIndex(InCoord);
 
 	if (!Tiles.IsValidIndex(Index))
 	{
+		if (bWarning)
+		{
+			UE_LOG(LogGridPathFinding, Error, TEXT("[UpdateTileInfo] Invalid tile index: %d for coord %s"),
+			       Index, *InCoord.ToString());
+		}
 		return;
 	}
 
+
 	auto& TileInfo = Tiles[Index];
-	TileInfo.Height = NewHeight;
+	TileInfo.RemoveBlockOnce();
 }
 
 void UGridMapModel::SetTileCustomData(const FHCubeCoord& InCoord, const FName& Key, const FString& Value)
@@ -417,12 +491,51 @@ const FString& UGridMapModel::GetTileCustomData(const FHCubeCoord& InCoord, cons
 	return EmptyString;
 }
 
+int32 UGridMapModel::GetTileHeight(int32 TileIndex)
+{
+	if (Tiles.IsValidIndex(TileIndex))
+	{
+		return Tiles[TileIndex].Height;
+	}
+
+	UE_LOG(LogGridPathFinding, Error, TEXT("[GetTileHeight] Invalid tile index: %d"), TileIndex);
+	return INT32_MAX;
+}
+
+bool UGridMapModel::CanTravelTo(int32 FromIndex, int32 ToIndex)
+{
+	// 如果该格子上有StandingActor，如果希望阻塞格子， 那么在UpdateStandingActor时可以通过重写增加Tile的BlockCount
+	if (Tiles.IsValidIndex(ToIndex))
+	{
+		if (Tiles[ToIndex].IsBlocking())
+		{
+			return false; // 如果BlockCount大于0，表示该格子被阻塞
+		}
+	}
+
+	return true;
+}
+
+int32 UGridMapModel::GetTileHeight(const FHCubeCoord& InCoord)
+{
+	auto Index = StableGetFullMapGridIterIndex(InCoord);
+	return GetTileHeight(Index);
+}
+
+double UGridMapModel::GetTraversalCost(int Identifier, int32 FromIndex, int32 ToIndex)
+{
+	// 子类重写
+	return 1.f;
+}
+
 // 异步任务类的实现
 UGridMapModel::FBuildTilesDataTask::FBuildTilesDataTask(UGridMapModel* InOwner,
+                                                        TArray<UGridEnvironmentType*> InEnvironmentTypes,
                                                         const TMap<FHCubeCoord, FSerializableTile>& InTilesData,
                                                         TSharedPtr<TArray<FTileInfo>> OutTiles,
                                                         TSharedPtr<TMap<FHCubeCoord, FTileEnvData>> OutEnvData):
 	Owner(InOwner)
+	, EnvironmentTypes(InEnvironmentTypes)
 	, TilesData(InTilesData)
 	, TargetTilesPtr(OutTiles)
 	, TargetTileEnvDataMapPtr(OutEnvData)
@@ -457,7 +570,7 @@ void UGridMapModel::FBuildTilesDataTask::DoWork()
 
 		// 添加到临时数组
 		TargetTileEnvDataMapPtr->Add(Coord, TileData.TileEnvData);
-
+		
 		// 如果处理了一批数据，可以在此处添加短暂的休眠，避免阻塞主线程太长时间
 		if (TargetTileEnvDataMapPtr->Num() % 1000 == 0)
 		{
@@ -471,7 +584,46 @@ void UGridMapModel::FBuildTilesDataTask::DoWork()
 			}
 		}
 	}
+	for (const auto EnvType : EnvironmentTypes)
+	{
+		// 打印是否为空指针
+		if (!EnvType)
+		{
+			UE_LOG(LogGridPathFinding, Error, TEXT("Environment type is null!"));
+			continue;
+		}
+	}
+	
 
+	TMap<FName, float> EnvDefaultCost;
+	TMap<FName, bool> EnvDefaultBlocking;
+
+	for (const auto EnvType : EnvironmentTypes)
+	{
+		EnvDefaultCost.Add(EnvType->TypeID, EnvType->GetCost());
+		EnvDefaultBlocking.Add(EnvType->TypeID, EnvType->bIsBlocking);
+	}
+
+	EnvDefaultCost.Add(UGridEnvironmentType::EmptyEnvTypeID, 9999.f); // 默认空环境的Cost
+	
+	// 处理TileInfo中的Cost, TargetTilesPtr中已经写入了全部的基础数据了， 需要根据环境来设置默认Cost
+	for (int32 i = 0; i < TargetTilesPtr->Num(); ++i)
+	{
+		const FHCubeCoord& Coord = (*TargetTilesPtr)[i].CubeCoord;
+		const auto TileData = TilesData.Find(Coord);
+		if (TileData == nullptr)
+		{
+			continue;
+		}
+		
+		(*TargetTilesPtr)[i].Cost = EnvDefaultCost[TileData->TileEnvData.EnvironmentType];
+		(*TargetTilesPtr)[i].Height = TileData->Height;
+		if (EnvDefaultBlocking[TileData->TileEnvData.EnvironmentType])
+		{
+			(*TargetTilesPtr)[i].AddBlockOnce();
+		}
+	}
+	
 	auto WG = Owner->GetWorld()->GetSubsystem<UWaitGroupManager>()->CreateWaitGroup(TEXT("Token创建"));
 	WG.Value->Add(1);
 	CreateTokenWaitGroupID = WG.Key;
@@ -534,7 +686,7 @@ void UGridMapModel::FBuildTilesDataTask::StartBatchTokenCreation(int32 InBatchSi
 	});
 }
 
-FVector UGridMapModel::StableCoordToWorld(const FHCubeCoord& InCoord)
+FVector UGridMapModel::StableCoordToWorld(const FHCubeCoord& InCoord, bool bIgnoreHeight)
 {
 	// Set the layout orientation
 	switch (MapConfig.MapType)
@@ -548,7 +700,9 @@ FVector UGridMapModel::StableCoordToWorld(const FHCubeCoord& InCoord)
 			float x = ((TileOrientation.f0 * InCoord.QRS.X) + (TileOrientation.f1 * InCoord.QRS.Y)) * GridSize.X;
 			float y = ((TileOrientation.f2 * InCoord.QRS.X) + (TileOrientation.f3 * InCoord.QRS.Y)) * GridSize.Y;
 
-			return FVector(x + MapConfig.MapCenter.X, y + MapConfig.MapCenter.Y, MapConfig.MapCenter.Z);
+			float z = bIgnoreHeight? 0.f : GetTileHeightOffset(InCoord);
+			
+			return FVector(x + MapConfig.MapCenter.X, y + MapConfig.MapCenter.Y, MapConfig.MapCenter.Z + z);
 		}
 	default:
 		break;
@@ -831,11 +985,12 @@ bool UGridMapModel::IsCoordInMapArea(const FHCubeCoord& InCoord) const
 				break;
 			case EGridMapDrawMode::BaseOnRowColumn:
 				{
+					// 使用缓存的边界值
 					auto RowColumn = StableCoordToRowColumn(InCoord);
-					return RowColumn.X >= -MapConfig.MapSize.X / 2.f &&
-						RowColumn.X <= MapConfig.MapSize.X / 2.f &&
-						RowColumn.Y >= -MapConfig.MapSize.Y / 2.f &&
-						RowColumn.Y <= MapConfig.MapSize.Y / 2.f;
+                    
+					// 使用相同的边界检查逻辑：注意是 < RowEnd 而不是 <= 
+					return RowColumn.X >= CachedRowStart && RowColumn.X < CachedRowEnd &&
+						   RowColumn.Y >= CachedColumnStart && RowColumn.Y < CachedColumnEnd;
 				}
 			}
 		}
@@ -863,16 +1018,12 @@ void UGridMapModel::StableForEachMapGrid(
 				break;
 			case EGridMapDrawMode::BaseOnRowColumn:
 				{
-					const auto RowStart = -FMath::FloorToInt(MapConfig.MapSize.X / 2.f);
-					const auto RowEnd = FMath::CeilToInt(MapConfig.MapSize.X / 2.f);
-					const auto ColumnStart = -FMath::FloorToInt(MapConfig.MapSize.Y / 2.f);
-					const auto ColumnEnd = FMath::CeilToInt(MapConfig.MapSize.Y / 2.f);
-
+					// 使用缓存的边界值
 					if (MapConfig.TileOrientation == ETileOrientationFlag::FLAT)
 					{
-						for (int32 Column{ColumnStart}; Column < ColumnEnd; ++Column)
+						for (int32 Column{CachedColumnStart}; Column < CachedColumnEnd; ++Column)
 						{
-							for (int32 Row{RowStart}; Row < RowEnd; ++Row)
+							for (int32 Row{CachedRowStart}; Row < CachedRowEnd; ++Row)
 							{
 								auto Q = Column;
 								auto R = Row - (Column - (Column & 1)) / 2;
@@ -885,9 +1036,9 @@ void UGridMapModel::StableForEachMapGrid(
 					}
 					else if (MapConfig.TileOrientation == ETileOrientationFlag::POINTY)
 					{
-						for (int32 Row{RowStart}; Row < RowEnd; ++Row)
+						for (int32 Row{CachedRowStart}; Row < CachedRowEnd; ++Row)
 						{
-							for (int32 Column{ColumnStart}; Column < ColumnEnd; ++Column)
+							for (int32 Column{CachedColumnStart}; Column < CachedColumnEnd; ++Column)
 							{
 								auto Q = Column - (Row - (Row & 1)) / 2;
 								auto R = Row;
@@ -928,38 +1079,34 @@ int32 UGridMapModel::StableGetFullMapGridIterIndex(const FHCubeCoord& InCoord) c
 		break;
 	case EGridMapDrawMode::BaseOnRowColumn:
 		{
-			const auto RowStart = -FMath::FloorToInt(MapConfig.MapSize.X / 2.f);
-			const auto RowEnd = FMath::CeilToInt(MapConfig.MapSize.X / 2.f);
-			const auto ColumnStart = -FMath::FloorToInt(MapConfig.MapSize.Y / 2.f);
-			const auto ColumnEnd = FMath::CeilToInt(MapConfig.MapSize.Y / 2.f);
-
+			// 使用缓存的边界值
 			if (MapConfig.TileOrientation == ETileOrientationFlag::FLAT)
 			{
 				auto Row = R + (Q - (Q & 1)) / 2;
-				if (Q < ColumnStart || Q >= ColumnEnd || Row < RowStart || Row >= RowEnd)
+				if (Q < CachedColumnStart || Q >= CachedColumnEnd || Row < CachedRowStart || Row >= CachedRowEnd)
 				{
 					// 不在地图中
 					break;
 				}
 
-				auto DeltaCol = Q - ColumnStart;
+				auto DeltaCol = Q - CachedColumnStart;
 				int32 PassedCount = DeltaCol * MapConfig.MapSize.X;
 
-				return PassedCount + Row - RowStart;
+				return PassedCount + Row - CachedRowStart;
 			}
 
 			if (MapConfig.TileOrientation == ETileOrientationFlag::POINTY)
 			{
 				auto Col = Q + (R - (R & 1)) / 2;
-				if (Col < ColumnStart || Col >= ColumnEnd || R < RowStart || R >= RowEnd)
+				if (Col < CachedColumnStart || Col >= CachedColumnEnd || R < CachedRowStart || R >= CachedRowEnd)
 				{
 					break;
 				}
 
-				auto DeltaRow = R - RowStart;
+				auto DeltaRow = R - CachedRowStart;
 				int32 PassedCount = DeltaRow * MapConfig.MapSize.Y;
 
-				return PassedCount + Col - ColumnStart;
+				return PassedCount + Col - CachedColumnStart;
 			}
 		}
 		break;
@@ -983,13 +1130,9 @@ int32 UGridMapModel::StableGetChunkCount() const
 	case EGridMapDrawMode::BaseOnRowColumn:
 		{
 			// 从左上开始， 每ChunkRowSize*ChunkColumnSize的方形区域构成一个Chunk, 根据MapSize计算总共需要划分几个区块
-			const auto RowStart = -FMath::FloorToInt(MapConfig.MapSize.X / 2.f);
-			const auto RowEnd = FMath::CeilToInt(MapConfig.MapSize.X / 2.f);
-			const auto ColumnStart = -FMath::FloorToInt(MapConfig.MapSize.Y / 2.f);
-			const auto ColumnEnd = FMath::CeilToInt(MapConfig.MapSize.Y / 2.f);
-
-			const int32 MapRows = RowEnd - RowStart;
-			const int32 MapColumns = ColumnEnd - ColumnStart;
+			// 使用缓存的边界值
+			const int32 MapRows = CachedRowEnd - CachedRowStart;
+			const int32 MapColumns = CachedColumnEnd - CachedColumnStart;
 
 			const int32 NumChunksX = FMath::CeilToInt((float)MapRows / GSettings->MapChunkSize.X);
 			const int32 NumChunksY = FMath::CeilToInt((float)MapColumns / GSettings->MapChunkSize.Y);
@@ -1018,22 +1161,19 @@ int32 UGridMapModel::StableGetCoordChunkIndex(const FHCubeCoord& InCoord) const
 		break;
 	case EGridMapDrawMode::BaseOnRowColumn:
 		{
-			const auto RowStart = -FMath::FloorToInt(MapConfig.MapSize.X / 2.f);
-			const auto ColumnStart = -FMath::FloorToInt(MapConfig.MapSize.Y / 2.f);
-			const auto ColumnEnd = FMath::CeilToInt(MapConfig.MapSize.Y / 2.f);
-
+			// 使用缓存的边界值
 			auto CoordRowCol = StableCoordToRowColumn(InCoord);
 
 			// 计算相对于地图左上角的偏移
-			int32 RelRow = CoordRowCol.X - RowStart;
-			int32 RelCol = CoordRowCol.Y - ColumnStart;
+			int32 RelRow = CoordRowCol.X - CachedRowStart;
+			int32 RelCol = CoordRowCol.Y - CachedColumnStart;
 
 			// 计算该坐标所在的区块行列
 			int32 ChunkRow = RelRow / ChunkSize;
 			int32 ChunkCol = RelCol / ChunkSize;
 
 			// 计算地图的总区块列数
-			const int32 MapColumns = ColumnEnd - ColumnStart;
+			const int32 MapColumns = CachedColumnEnd - CachedColumnStart;
 			const int32 NumChunksY = FMath::CeilToInt(static_cast<double>(MapColumns) / ChunkSize);
 
 			// 计算区块索引：区块行 * 每行区块数 + 区块列
@@ -1056,13 +1196,9 @@ FHCubeCoord UGridMapModel::StableGetCoordByIndex(const int32 InIndex) const
     {
     case EGridMapDrawMode::BaseOnRowColumn:
         {
-            const auto RowStart = -FMath::FloorToInt(MapConfig.MapSize.X / 2.f);
-            const auto RowEnd = FMath::CeilToInt(MapConfig.MapSize.X / 2.f);
-            const auto ColumnStart = -FMath::FloorToInt(MapConfig.MapSize.Y / 2.f);
-            const auto ColumnEnd = FMath::CeilToInt(MapConfig.MapSize.Y / 2.f);
-            
-            const int32 MapRows = RowEnd - RowStart;
-            const int32 MapColumns = ColumnEnd - ColumnStart;
+            // 使用缓存的边界值
+            const int32 MapRows = CachedRowEnd - CachedRowStart;
+            const int32 MapColumns = CachedColumnEnd - CachedColumnStart;
             
             if (InIndex < 0 || InIndex >= MapRows * MapColumns)
             {
@@ -1076,8 +1212,8 @@ FHCubeCoord UGridMapModel::StableGetCoordByIndex(const int32 InIndex) const
                 int32 DeltaCol = InIndex / MapRows;
                 int32 DeltaRow = InIndex % MapRows;
                 
-                int32 Column = ColumnStart + DeltaCol;
-                int32 Row = RowStart + DeltaRow;
+                int32 Column = CachedColumnStart + DeltaCol;
+                int32 Row = CachedRowStart + DeltaRow;
                 
                 auto Q = Column;
                 auto R = Row - (Column - (Column & 1)) / 2;
@@ -1090,8 +1226,8 @@ FHCubeCoord UGridMapModel::StableGetCoordByIndex(const int32 InIndex) const
 	            int32 DeltaRow = InIndex / MapColumns;
 	            int32 DeltaCol = InIndex % MapColumns;
                 
-	            int32 Row = RowStart + DeltaRow;
-	            int32 Column = ColumnStart + DeltaCol;
+	            int32 Row = CachedRowStart + DeltaRow;
+	            int32 Column = CachedColumnStart + DeltaCol;
                 
 	            auto Q = Column - (Row - (Row & 1)) / 2;
 	            auto R = Row;
@@ -1132,6 +1268,83 @@ int32 UGridMapModel::GetDistance(const FHCubeCoord& A, const FHCubeCoord& B) con
 	return 0;
 }
 
+int32 UGridMapModel::GetDistanceByIndex(const int32 A, const int32 B) const
+{
+	if (A == B) return 0;
+
+	// 边界检查
+	const int32 TotalGridCount = MapConfig.MapSize.X * MapConfig.MapSize.Y;
+	if (A < 0 || A >= TotalGridCount || B < 0 || B >= TotalGridCount)
+	{
+		UE_LOG(LogGridPathFinding, Warning, TEXT("GetDistanceByIndex: Invalid index A=%d B=%d"), A, B);
+		return INT_MAX;
+	}
+
+	switch (MapConfig.MapType)
+	{
+		case EGridMapType::HEX_STANDARD:
+		case EGridMapType::RECTANGLE_SIX_DIRECTION:
+			{
+				switch (MapConfig.DrawMode)
+				{
+					case EGridMapDrawMode::BaseOnRowColumn:
+						{
+							// 缓存地图参数（这些值在地图生命周期内不变）
+							const int32 MapRows = MapConfig.MapSize.X;
+							const int32 MapColumns = MapConfig.MapSize.Y;
+							const int32 MapRowsHalf = MapRows / 2;
+							const int32 MapColumnsHalf = MapColumns / 2;
+
+							int32 qA, rA, qB, rB;
+
+							if (MapConfig.TileOrientation == ETileOrientationFlag::FLAT)
+							{
+								// FLAT布局的索引到坐标转换
+								const int32 columnA = A / MapRows;
+								const int32 rowA = A % MapRows;
+								qA = columnA - MapColumnsHalf;
+								rA = rowA - (columnA - (columnA & 1)) / 2 - MapRowsHalf;
+
+								const int32 columnB = B / MapRows;
+								const int32 rowB = B % MapRows;
+								qB = columnB - MapColumnsHalf;
+								rB = rowB - (columnB - (columnB & 1)) / 2 - MapRowsHalf;
+							}
+							else // POINTY
+							{
+								// POINTY布局的索引到坐标转换
+								const int32 rowA = A / MapColumns;
+								const int32 columnA = A % MapColumns;
+								qA = columnA - (rowA - (rowA & 1)) / 2 - MapColumnsHalf;
+								rA = rowA - MapRowsHalf;
+
+								const int32 rowB = B / MapColumns;
+								const int32 columnB = B % MapColumns;
+								qB = columnB - (rowB - (rowB & 1)) / 2 - MapColumnsHalf;
+								rB = rowB - MapRowsHalf;
+							}
+
+							// 六边形距离计算
+							return (FMath::Abs(qA - qB) + FMath::Abs(qA + rA - qB - rB) + FMath::Abs(rA - rB)) / 2;
+						}
+					case EGridMapDrawMode::BaseOnRadius:
+					case EGridMapDrawMode::BaseOnVolume:
+						UE_LOG(LogGridPathFinding, Warning, TEXT("GetDistanceByIndex: 暂不支持的绘制模式 %s"),
+						       *UEnum::GetValueAsString(MapConfig.DrawMode));
+						break;
+				}
+				break;
+			}
+		case EGridMapType::SQUARE_STANDARD:
+		case EGridMapType::RECTANGLE_STANDARD:
+			UE_LOG(LogGridPathFinding, Warning, TEXT("GetDistanceByIndex: 暂不支持的地图类型 %s"),
+			       *UEnum::GetValueAsString(MapConfig.MapType));
+			break;
+	}
+
+	return INT_MAX; // 默认返回最大值，表示不支持的地图类型
+}
+
 int32 UGridMapModel::GetNeighborDirection(const FHCubeCoord& From, const FHCubeCoord& To) const
 {
 	if (GetDistance(From, To) != 1)
@@ -1163,12 +1376,8 @@ void UGridMapModel::StableGetChunkCoords(const int32 InChunkIndex, TArray<FHCube
 	{
 	case EGridMapDrawMode::BaseOnRowColumn:
 		{
-			// 计算地图边界
-			const auto RowStart = -FMath::FloorToInt(MapConfig.MapSize.X / 2.f);
-			const auto ColumnStart = -FMath::FloorToInt(MapConfig.MapSize.Y / 2.f);
-			const auto ColumnEnd = FMath::CeilToInt(MapConfig.MapSize.Y / 2.f);
-			// 计算区块数量
-			const int32 MapColumns = ColumnEnd - ColumnStart;
+			// 使用缓存的边界值
+			const int32 MapColumns = CachedColumnEnd - CachedColumnStart;
 			const int32 NumChunksY = FMath::CeilToInt(static_cast<float>(MapColumns) / ChunkSize);
 
 			// 计算区块的行列
@@ -1176,10 +1385,10 @@ void UGridMapModel::StableGetChunkCoords(const int32 InChunkIndex, TArray<FHCube
 			const int32 ChunkCol = InChunkIndex % NumChunksY;
 
 			// 计算区块的起始行列
-			const int32 StartRow = RowStart + ChunkRow * ChunkSize;
-			const int32 StartCol = ColumnStart + ChunkCol * ChunkSize;
-			const int32 EndRow = FMath::Min(StartRow + ChunkSize, RowStart + MapConfig.MapSize.X);
-			const int32 EndCol = FMath::Min(StartCol + ChunkSize, ColumnStart + MapConfig.MapSize.Y);
+			const int32 StartRow = CachedRowStart + ChunkRow * ChunkSize;
+			const int32 StartCol = CachedColumnStart + ChunkCol * ChunkSize;
+			const int32 EndRow = FMath::Min(StartRow + ChunkSize, CachedRowStart + MapConfig.MapSize.X);
+			const int32 EndCol = FMath::Min(StartCol + ChunkSize, CachedColumnStart + MapConfig.MapSize.Y);
 
 			if (MapConfig.TileOrientation == ETileOrientationFlag::FLAT)
 			{
@@ -1265,7 +1474,15 @@ TArray<FHCubeCoord> UGridMapModel::GetRangeCoords(const FHCubeCoord& Center, int
 		for (int32 dr = FMath::Max(-Radius, -dq - Radius); dr <= FMath::Min(Radius, -dq + Radius); ++dr)
 		{
 			int32 ds = -dq - dr;
-			Result.Add(FHCubeCoord{FIntVector(Center.QRS.X + dq, Center.QRS.Y + dr, Center.QRS.Z + ds)});
+			auto Coord = FHCubeCoord{FIntVector(Center.QRS.X + dq, Center.QRS.Y + dr, Center.QRS.Z + ds)};
+
+			// 检查坐标是否在地图范围内
+			if (!IsCoordInMapArea(Coord))
+			{
+				continue; // 如果不在地图范围内，跳过
+			}
+			
+			Result.Add(Coord);
 		}
 	}
 	return Result;
@@ -1274,6 +1491,11 @@ TArray<FHCubeCoord> UGridMapModel::GetRangeCoords(const FHCubeCoord& Center, int
 int32 UGridMapModel::GetNeighborIndex(int32 NodeIndex, int32 Direction) const
 {
 	return NeighborIndicesCache[NodeIndex][Direction];
+}
+
+float UGridMapModel::GetTileHeightOffset(const FHCubeCoord& InCoord)
+{
+	return 0.f;
 }
 
 FHCubeCoord UGridMapModel::HexCoordRound(const FHFractional& F)

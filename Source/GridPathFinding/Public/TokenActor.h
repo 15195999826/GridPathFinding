@@ -47,9 +47,13 @@ public:
 	FSerializableTokenData SerializableTokenData();
 
 	void DeserializeTokenData(const FSerializableTokenData& TokenData);
+
+	void DeserializeFeatureData(const int32 FeatureIndex,const FSerializableTokenFeature& FeatureData);
 	
 	void UpdateFeatureProperty(int InFeatureIndex, TSubclassOf<UActorComponent> FeatureClass, const FSerializableTokenProperty& PropertyCopy);
 
+	void UpdatePropertyArray(const int InFeatureIndex,const FName& PropertyArrayName, const int ArrayIndex ,TSubclassOf<UActorComponent> FeatureClass, const TArray<FSerializableTokenProperty>& PropertyCopy);
+	
 	void SetCustomGameplayData(const FName& Key, const FString& Value)
 	{
 		CustomGameplayData.Add(Key, Value);

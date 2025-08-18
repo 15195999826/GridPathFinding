@@ -23,11 +23,24 @@ class GRIDPATHFINDING_API ITokenFeatureInterface
 
 	// Add interface functions to this class. This is the class that will be inherited to implement this interface.
 public:
-	virtual TArray<FSerializableTokenProperty> SerializeFeatureProperties() const = 0;
+	
+	//virtual TArray<FSerializableTokenProperty> SerializeFeatureProperties() const = 0
 
-	virtual void DeserializeFeatureProperties(const TArray<FSerializableTokenProperty>& Properties) = 0;
+	//virtual void DeserializeFeatureProperties(const TArray<FSerializableTokenProperty>& Properties) = 0;
 
+	//virtual void UpdateFeatureProperty(const FSerializableTokenProperty& InNewProperty) = 0;
+
+	virtual FSerializableTokenFeature SerializeFeatureProperties() const = 0;
+	
+	//virtual TMap<FName, TArray<FSerializableTokenProperty>> CreateDefaultArrayProperty(int32 ArrayTypeIndex) = 0;
+	
+	virtual void DeserializeFeatureProperties(const FSerializableTokenFeature& TokenFeature) = 0;
+	
+	virtual void UpdateFeaturePropertyArray(const TArray<FSerializableTokenProperty>& InNewPropertyArray,const FName& PropertyArrayName,const int32 UpdateIndex) = 0;
+	
 	virtual void UpdateFeatureProperty(const FSerializableTokenProperty& InNewProperty) = 0;
 
+	virtual TArray<FSerializableTokenProperty> CreatePropertyArray(const FName& PropertyArrayName) = 0;
+	
 	virtual void InitGameplayFeature() = 0;
 };

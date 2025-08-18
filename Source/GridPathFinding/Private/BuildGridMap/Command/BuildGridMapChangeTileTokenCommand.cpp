@@ -17,22 +17,22 @@ void UBuildGridMapChangeTileTokenCommand::Initialize(const FHCubeCoord& InCoord,
 	NewActorIndex = InActorIndex;
 	NewTileTokenName = InNewTileToken;
 	
-	auto MyGameMode = GetWorld()->GetAuthGameMode<ABuildGridMapGameMode>();
+	const auto MyGameMode = GetWorld()->GetAuthGameMode<ABuildGridMapGameMode>();
 
 	//上一个TokenAcotr
-	auto ExistingTokenActor = MyGameMode->GridMapModel->GetTokenByIndex(SelectedCoord, InActorIndex, false);
+	const auto ExistingTokenActor = MyGameMode->GridMapModel->GetTokenByIndex(SelectedCoord, InActorIndex, false);
 
 	
 	if (ExistingTokenActor)
 	{
 		//保存TokenFeaturesComponent数据
-		auto TokenFeatures = ExistingTokenActor->GetComponentsByInterface(UTokenFeatureInterface::StaticClass());
-		for (UActorComponent* Component : TokenFeatures)
+		const auto TokenFeatures = ExistingTokenActor->GetComponentsByInterface(UTokenFeatureInterface::StaticClass());
+		for (const UActorComponent* Component : TokenFeatures)
 		{
 			FSerializableTokenFeature FeatureData;
 			FeatureData.FeatureClass = Component->GetClass();
-			auto FeatureInterface = Cast<ITokenFeatureInterface>(Component);
-			FeatureData.Properties = FeatureInterface->SerializeFeatureProperties();
+			const auto FeatureInterface = Cast<ITokenFeatureInterface>(Component);
+			FeatureData.Properties = FeatureInterface->SerializeFeatureProperties().Properties;
 			OldTokenData.Features.Add(FeatureData);
 		}
 		//保存TokenActor类
@@ -43,6 +43,12 @@ void UBuildGridMapChangeTileTokenCommand::Initialize(const FHCubeCoord& InCoord,
 bool UBuildGridMapChangeTileTokenCommand::Execute()
 {
 	auto MyGameMode = GetWorld()->GetAuthGameMode<ABuildGridMapGameMode>();
+	if (NewTileTokenName == MyGameMode->NoneString)
+	{
+		UE_LOG(LogGridPathFinding, Log, TEXT("[ABuildGridMapGameMode.OnTokenActorTypeChanged] 设置为None, 不创建新的TokenActor"));
+		MyGameMode->GetBuildGridMapWindow()->TileConfigWidget->IntervalUpdateTokenActorPanel(NewActorIndex,MyGameMode->GetMutEditingTile(SelectedCoord)->SerializableTokens[NewActorIndex]);
+		return false;
+	}
 	MyGameMode->MarkEditingTilesDirty(SelectedCoord);
 	auto MapModel = MyGameMode->GridMapModel;
 	// 删除当前位置上的对应Index的TokenActor
@@ -54,11 +60,6 @@ bool UBuildGridMapChangeTileTokenCommand::Execute()
 	}
 
 	// 如果为空 则不创建新的
-	if (NewTileTokenName == MyGameMode->NoneString)
-	{
-		UE_LOG(LogGridPathFinding, Log, TEXT("[ABuildGridMapGameMode.OnTokenActorTypeChanged] 设置为None, 不创建新的TokenActor"));
-		return false;
-	}
 
 	if (!MyGameMode->GetTokenActorTypeStringToIndexMap().Contains(NewTileTokenName))
 	{
@@ -149,7 +150,7 @@ bool UBuildGridMapChangeTileTokenCommand::Undo()
 		for (UActorComponent* Component : TokenFeatures)
 		{
 			auto FeatureInterface = Cast<ITokenFeatureInterface>(Component);
-			FeatureInterface->DeserializeFeatureProperties(Properties.Properties);
+			FeatureInterface->DeserializeFeatureProperties(Properties);
 		}
 	}
 	

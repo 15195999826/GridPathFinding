@@ -56,8 +56,7 @@ public:
 
 	UPROPERTY(BlueprintReadOnly)
 	TObjectPtr<UBuildGridMapCommandManager> CommandManager;
-
-
+	
 protected:
 	// 在蓝图中创建和赋值
 	UPROPERTY(BlueprintReadWrite)
@@ -262,6 +261,19 @@ public:
 	void DebugCommandHistory();
 	
 	void ListenToTokenActorChange(UBuildGridMapTokenActorPanel* NewActorPanel);
+
+	// 增加TokenProperty数组元素
+	UFUNCTION()
+	void OnAddTokenPropertyArrayButtonClick(const int32 InActorTokenIndex,const int32 InFeatureIndex,const FName& InPropertyArrayName);
+
+	// 删除TokenProperty数组元素
+	UFUNCTION()
+	void OnDeleteTokenPropertyArrayButtonClick(const int32 InActorTokenIndex,const int32 InFeatureIndex,const FName& InPropertyArrayName, const int32 InArrayIndex);
+
+	// 更改TokenProperty数组元素的值
+	UFUNCTION()
+	void OnTokenFeaturePropertyArrayChanged(const int InActorIndex,const int InFeatureIndex,const FName& ArrayName ,
+		const int ArrayIndex,const FName& InPropertyName,const FString& NewValue);
 	
 private:
 	// Map UI事件
@@ -290,12 +302,14 @@ private:
 	UFUNCTION()
 	void OnEnvTextureIndexTextCommitted(const FText& Text, ETextCommit::Type CommitMethod);
 	UFUNCTION()
+	void OnHeightSpinBoxValueCommitted(float InValue, ETextCommit::Type CommitMethod);
+	UFUNCTION()
 	void OnAddTokenButtonClick();
 	UFUNCTION()
 	void OnTokenDeleteClicked(int32 SerializedTokenIndex);
 	
 	void OnTokenActorTypeChanged(int InActorIndex, const FString& NewTypeString);
-	void OnTokenFeaturePropertyChanged(int InActorIndex, int InFeatureIndex, FName InPropertyName, FString NewValue);
+	void OnTokenFeaturePropertyChanged(int InActorIndex, int InFeatureIndex,FName InPropertyName, FString NewValue);
 	// UFUNCTION()
 	// void OnEnvTextureIndexTextChanged(const FText& InNewText);
 

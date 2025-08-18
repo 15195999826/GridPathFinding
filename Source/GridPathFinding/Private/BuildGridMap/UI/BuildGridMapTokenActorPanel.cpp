@@ -76,8 +76,75 @@ void UBuildGridMapTokenActorPanel::BindTokenActor(int32 InTokeActorIndex, const 
 
 		// 绑定FeaturePropertyChanged事件
 		FeaturePanel->OnFeaturePropertyChanged.AddUObject(this, &UBuildGridMapTokenActorPanel::OnFeaturePropertyChange);
-		
+		FeaturePanel->OnAddTokenPropertyArrayDelegate.AddUObject(this,&UBuildGridMapTokenActorPanel::OnAddTokenPropertyArray);
+		FeaturePanel->OnDeletePropertyArraySignature.AddDynamic(this,&UBuildGridMapTokenActorPanel::OnDeleteTokenPropertyArray);
+		FeaturePanel->OnPropertyArrayValueChangedSignature.AddDynamic(this,&UBuildGridMapTokenActorPanel::OnTokenPropertyArrayValueChanged);
 		FeatureRoot->AddChildToVerticalBox(FeaturePanel);
+	}
+}
+
+void UBuildGridMapTokenActorPanel::UpdateTokenPropertyArray(const int32 InFeatureIndex, const FName& InArrayName,
+		 const FSerializableTokenPropertyArray& InPropertyArrayData)
+{
+	auto CurrentFeaturePanels = FeatureRoot->GetAllChildren();
+	if (CurrentFeaturePanels.IsValidIndex(InFeatureIndex))
+	{
+		auto FeaturePanel = Cast<UBuildGridMapFeaturePanel>(CurrentFeaturePanels[InFeatureIndex]);
+		if (FeaturePanel)
+		{
+			FeaturePanel->UpdateTokenPropertyArray(InArrayName, InPropertyArrayData);
+		}
+		else
+		{
+			UE_LOG(LogGridPathFinding, Error, TEXT("[BuildGridMapTokenActorPanel.IntervalAddTokenPropertyArray] FeaturePanel not found at index: %d"), InFeatureIndex);
+		}
+	}
+	else
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[BuildGridMapTokenActorPanel.IntervalAddTokenPropertyArray] Index out of range: %d"), InFeatureIndex);
+	}
+}
+
+void UBuildGridMapTokenActorPanel::UpdateTokenProperty(const int32 InFeatureIndex,const FSerializableTokenProperty& InPropertyData)
+{
+	auto CurrentFeaturePanels = FeatureRoot->GetAllChildren();
+	if (CurrentFeaturePanels.IsValidIndex(InFeatureIndex))
+	{
+		auto FeaturePanel = Cast<UBuildGridMapFeaturePanel>(CurrentFeaturePanels[InFeatureIndex]);
+		if (FeaturePanel)
+		{
+			FeaturePanel->UpdateTokenProperty(InPropertyData);
+		}
+		else
+		{
+			UE_LOG(LogGridPathFinding, Error, TEXT("[BuildGridMapTokenActorPanel.UpdateTokenProperty] FeaturePanel not found at index: %d"), InFeatureIndex);
+		}
+	}
+	else
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[BuildGridMapTokenActorPanel.UpdateTokenProperty] Index out of range: %d"), InFeatureIndex);
+	}
+}
+
+void UBuildGridMapTokenActorPanel::UpdateTokenPropertyInArray(const int32 InFeatureIndex, const FName& InArrayName,
+	const int32 InArrayIndex, const FSerializableTokenProperty& InPropertyData)
+{
+	auto CurrentFeaturePanels = FeatureRoot->GetAllChildren();
+	if (CurrentFeaturePanels.IsValidIndex(InFeatureIndex))
+	{
+		auto FeaturePanel = Cast<UBuildGridMapFeaturePanel>(CurrentFeaturePanels[InFeatureIndex]);
+		if (FeaturePanel)
+		{
+			FeaturePanel->UpdateTokenPropertyInArray(InArrayName,InArrayIndex,InPropertyData);
+		}
+		else
+		{
+			UE_LOG(LogGridPathFinding, Error, TEXT("[BuildGridMapTokenActorPanel.UpdateTokenPropertyInArray] FeaturePanel not found at index: %d"), InFeatureIndex);
+		}
+	}
+	else
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[BuildGridMapTokenActorPanel.UpdateTokenPropertyInArray] Index out of range: %d"), InFeatureIndex);
 	}
 }
 
@@ -87,7 +154,9 @@ void UBuildGridMapTokenActorPanel::Clean()
 	OnTokenActorTypeChanged.Clear();
 	OnTokenFeaturePropertyChanged.Clear();
 	OnTokenDeleteClicked.Clear();
-
+	OnAddTokenPropertyArraySigniture.Clear();
+	OnTokenDeletePropertyArray.Clear();
+	OnPropertyArrayValueChanged.Clear();
 	for (int32 i = 0; i < FeatureRoot->GetChildrenCount(); ++i)
 	{
 		auto FeaturePanel = Cast<UBuildGridMapFeaturePanel>(FeatureRoot->GetChildAt(i));
@@ -110,8 +179,26 @@ void UBuildGridMapTokenActorPanel::OnTokenActorTypeSelectionChanged(FString Sele
 	}
 }
 
-void UBuildGridMapTokenActorPanel::OnFeaturePropertyChange(int InFeatureIndex, const FName& PropertyName,
+void UBuildGridMapTokenActorPanel::OnFeaturePropertyChange(int InFeatureIndex,const FName& PropertyName,
 	const FString& PropertyValue)
 {
 	OnTokenFeaturePropertyChanged.Broadcast(TokenActorIndex, InFeatureIndex, PropertyName, PropertyValue);
 }
+
+void UBuildGridMapTokenActorPanel::OnAddTokenPropertyArray(const int32 FeatureIndex,const FName& InPropertyArrayName)
+{
+	OnAddTokenPropertyArraySigniture.Broadcast(TokenActorIndex, FeatureIndex, InPropertyArrayName);
+}
+
+void UBuildGridMapTokenActorPanel::OnDeleteTokenPropertyArray(const int32 InFeatureIndex,
+	const FName& InPropertyArrayName, const int32 InArrayIndex)
+{
+	OnTokenDeletePropertyArray.Broadcast(TokenActorIndex, InFeatureIndex, InPropertyArrayName, InArrayIndex);
+}
+
+void UBuildGridMapTokenActorPanel::OnTokenPropertyArrayValueChanged(const int32 InFeatureIndex,
+	const FName& InPropertyArrayName, const int32 InArrayIndex, const FName& PropertyName, const FString& NewValue)
+{
+	OnPropertyArrayValueChanged.Broadcast(TokenActorIndex,InFeatureIndex,InPropertyArrayName,InArrayIndex,PropertyName,NewValue);
+}
+

@@ -45,11 +45,14 @@ struct FGridEnvironmentMaterialCustomData
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, DisplayName="贴图Category")
 	float TextureArrayCategory;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, DisplayName="贴图Category")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, DisplayName="贴图Tint")
 	float DefaultTint = 1.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, DisplayName="Roughness")
 	float Roughness = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, DisplayName="Roughness")
+	float NormalIntensity = 1.f;
 };
 
 /**
@@ -125,5 +128,10 @@ public:
 	virtual FPrimaryAssetId GetPrimaryAssetId() const override
 	{
 		return FPrimaryAssetId("HexEnvironmentType", TypeID);
+	}
+
+	virtual float GetCost() const
+	{
+		return MovementCost;
 	}
 };

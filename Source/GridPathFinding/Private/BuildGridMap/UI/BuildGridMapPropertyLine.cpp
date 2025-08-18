@@ -7,9 +7,54 @@
 #include "Components/ComboBoxString.h"
 #include "Components/TextBlock.h"
 
-void UBuildGridMapPropertyLine::InitPropertyLine(const FSerializableTokenProperty& InProperty)
+void UBuildGridMapPropertyLine::InitPropertyLine(const FSerializableTokenProperty& InPropertyLine)
 {
-	PropertyType = InProperty.PropertyType;
+	
+	PropertyType = InPropertyLine.PropertyType;
+	PropertyName = InPropertyLine.PropertyName;
+	LabelText->SetText(FText::FromName(InPropertyLine.PropertyName));
+	switch (PropertyType)
+	{
+	case ETokenPropertyType::None:
+		break;
+	case ETokenPropertyType::Float:
+	case ETokenPropertyType::Int:
+	case ETokenPropertyType::String:
+		SetGeneralValue(InPropertyLine.Value);
+		break;
+	case ETokenPropertyType::Vector:
+		{
+			FVector VectorValue;
+			VectorValue.InitFromString(InPropertyLine.Value);
+			SetVectorValue(VectorValue);
+		}
+		break;
+	case ETokenPropertyType::SoftMeshPath:
+		{
+			// 需要先填充ComboBox的选项
+			// 从GameMode里获取可用的SoftMesh
+			auto BuildGridMapGM = GetWorld()->GetAuthGameMode<ABuildGridMapGameMode>();
+			auto MeshMap = BuildGridMapGM->GetAvailableStaticMeshes();
+			ComboBoxString->ClearOptions();
+			ComboBoxString->AddOption(ABuildGridMapGameMode::NoneString);
+
+			for (const auto& Pair : MeshMap)
+			{
+				ComboBoxString->AddOption(Pair.Key.ToString());
+			}
+			auto MappedMeshKey = BuildGridMapGM->GetStaticMeshShortName(InPropertyLine.Value);
+			SetComboBoxValue(MappedMeshKey.ToString());
+		}
+		break;
+	case ETokenPropertyType::Bool:
+		{
+			SetCheckBoxValue(InPropertyLine.Value);
+		}
+		break;
+	}
+	
+	//换成数组测试
+	/*PropertyType = InProperty.PropertyType;
 	PropertyName = InProperty.PropertyName;
 	LabelText->SetText(FText::FromName(InProperty.PropertyName));
 	switch (PropertyType) {
@@ -49,7 +94,7 @@ void UBuildGridMapPropertyLine::InitPropertyLine(const FSerializableTokenPropert
 				SetCheckBoxValue(InProperty.Value);
 			}
 			break;
-	}
+	}*/
 }
 
 void UBuildGridMapPropertyLine::Clean()
@@ -91,4 +136,37 @@ FString UBuildGridMapPropertyLine::GetValueString()
 	}
 
 	return FString();
+}
+
+void UBuildGridMapPropertyLine::UpdateProperty(const FSerializableTokenProperty& InPropertyData)
+{
+	switch (InPropertyData.PropertyType) {
+	case ETokenPropertyType::None:
+	case ETokenPropertyType::Float:
+	case ETokenPropertyType::Int:
+	case ETokenPropertyType::String:
+		{
+			SetGeneralValue(InPropertyData.Value);
+			break;
+		}
+	case ETokenPropertyType::Vector:
+		{
+			FVector VectorValue;
+			VectorValue.InitFromString(InPropertyData.Value);
+			SetVectorValue(VectorValue);
+			break;
+		}
+	case ETokenPropertyType::SoftMeshPath:
+		{
+			FSoftObjectPath SoftObjectPath(InPropertyData.Value);
+			TSoftObjectPtr<UStaticMesh> SoftMesh(SoftObjectPath);
+			SetComboBoxValue(SoftMesh.GetAssetName());
+			break;
+		}
+	case ETokenPropertyType::Bool:
+		{
+			SetCheckBoxValue(InPropertyData.Value);
+			break;
+		}
+	}
 }

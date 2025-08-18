@@ -17,6 +17,13 @@ struct FTileInfo
 	{
 	}
 
+protected:
+	// 从环境类型中读取的是否是障碍物， 方便快速寻路
+	// Block计数， 只有当数值为0时, 不被Block
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
+	int32 BlockCount = 0;
+	
+public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
 	FHCubeCoord CubeCoord;
 	
@@ -26,16 +33,7 @@ struct FTileInfo
 	// 从环境类型中读取的Cost， 方便快速寻路
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
 	float Cost = 1.f;
-
-	// 从环境类型中读取的是否是障碍物， 方便快速寻路
-	// Block计数， 只有当数值为0时, 不被Block
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
-	int32 BlockCount = 0;
-
-	//  ---- 寻路格子占用数据 Start----
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite)
-	bool HasAIBooked{false};
-
+	
 	// ---- 项目自定义数据 ----
 	UPROPERTY()
 	TMap<FName, FString> CustomDataMap;
@@ -50,6 +48,19 @@ struct FTileInfo
 	friend bool operator!=(const FTileInfo &A, const FTileInfo &B)
 	{
 		return !(A == B);
+	}
+
+	void AddBlockOnce()
+	{
+		BlockCount++;
+	}
+
+	void RemoveBlockOnce()
+	{
+		if (BlockCount > 0)
+		{
+			BlockCount--;
+		}
 	}
 
 	bool IsBlocking() const

@@ -65,12 +65,12 @@ FSerializableTokenData ATokenActor::SerializableTokenData()
 	{
 		// 将组件转换为FSerializableTokenFeature
 		FSerializableTokenFeature FeatureData;
-		FeatureData.FeatureClass = Component->GetClass();
 		auto FeatureInterface = Cast<ITokenFeatureInterface>(Component);
-		FeatureData.Properties = FeatureInterface->SerializeFeatureProperties();
+		FeatureData = FeatureInterface->SerializeFeatureProperties();
+		FeatureData.FeatureClass = Component->GetClass();
 		TokenData.Features.Add(FeatureData);
 	}
-
+	
 	return TokenData;
 }
 
@@ -89,7 +89,7 @@ void ATokenActor::DeserializeTokenData(const FSerializableTokenData& TokenData)
 			if (Component->GetClass() == FeatureData.FeatureClass)
 			{
 				// 反序列化新的属性
-				FeatureInterface->DeserializeFeatureProperties(FeatureData.Properties);
+				FeatureInterface->DeserializeFeatureProperties(FeatureData);
 				Find = true;
 				break;
 			}
@@ -103,8 +103,35 @@ void ATokenActor::DeserializeTokenData(const FSerializableTokenData& TokenData)
 	}
 }
 
+void ATokenActor::DeserializeFeatureData(const int32 FeatureIndex, const FSerializableTokenFeature& FeatureData)
+{
+	auto TokenFeatures = GetComponentsByInterface(UTokenFeatureInterface::StaticClass());
+	
+	auto FeatureInterface = Cast<ITokenFeatureInterface>(TokenFeatures[FeatureIndex]);
+	FeatureInterface->DeserializeFeatureProperties(FeatureData);
+	// Todo: 是否可以避免双循环检测的优化
+	/*bool Find = false;
+	for (const FSerializableTokenFeature& FeatureData : FeatureData)
+	{
+		if (TokenFeatures[FeatureIndex]->GetClass() == FeatureData.FeatureClass)
+		{
+			// 反序列化新的属性
+			FeatureInterface->DeserializeFeatureProperties(FeatureData);
+			Find = true;
+			break;
+		}
+	}
+
+	if (!Find)
+	{
+		// 如果没有找到对应的FeatureData， 可以选择清空属性或保留原有属性
+		UE_LOG(LogGridPathFinding, Warning,
+		       TEXT("[ATokenActor.DeserializeTokenData] Feature %s not found in TokenData"), *Component->GetName());
+	}*/
+}
+
 void ATokenActor::UpdateFeatureProperty(int InFeatureIndex, TSubclassOf<UActorComponent> FeatureClass,
-	const FSerializableTokenProperty& PropertyCopy)
+                                        const FSerializableTokenProperty& PropertyCopy)
 {
 	auto TokenFeatures = GetComponentsByInterface(UTokenFeatureInterface::StaticClass());
 	if (!TokenFeatures.IsValidIndex(InFeatureIndex))
@@ -117,6 +144,21 @@ void ATokenActor::UpdateFeatureProperty(int InFeatureIndex, TSubclassOf<UActorCo
 	check(TokenFeatures[InFeatureIndex]->GetClass() == FeatureClass);
 	auto FeatureInterface = Cast<ITokenFeatureInterface>(TokenFeatures[InFeatureIndex]);
 	FeatureInterface->UpdateFeatureProperty(PropertyCopy);
+}
+
+void ATokenActor::UpdatePropertyArray(const int InFeatureIndex, const FName& PropertyArrayName, const int ArrayIndex,
+	TSubclassOf<UActorComponent> FeatureClass, const TArray<FSerializableTokenProperty>& PropertyCopy)
+{
+	auto TokenFeatures = GetComponentsByInterface(UTokenFeatureInterface::StaticClass());
+	if (!TokenFeatures.IsValidIndex(InFeatureIndex))
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ATokenActor.UpdateFeatureProperty] FeatureIndex %d is out of range, FeatureType: %s"),
+			InFeatureIndex, *FeatureClass->GetName());
+		return;
+	}
+	check(TokenFeatures[InFeatureIndex]->GetClass() == FeatureClass);
+	auto FeatureInterface = Cast<ITokenFeatureInterface>(TokenFeatures[InFeatureIndex]);
+	FeatureInterface->UpdateFeaturePropertyArray(PropertyCopy, PropertyArrayName, ArrayIndex);
 }
 
 FTokenActorStruct ATokenActor::ToStruct() const

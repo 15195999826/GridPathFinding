@@ -14,22 +14,28 @@
 #include "BuildGridMap/BuildGridMapRenderer.h"
 #include "BuildGridMap/Command/BuildGirdMapChangeTokenFeaturePropertyCommand.h"
 #include "BuildGridMap/BuildTokenFeatureInterface.h"
+#include "BuildGridMap/Command/BuildGirdMapChangeTokenPropertyArrayCommand.h"
 #include "BuildGridMap/Command/BuildGridMapAddTokenCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMultiTileEnvCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMapColCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMapNameCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMapRowCommand.h"
+#include "BuildGridMap/Command/BuildGridMapAddPropertyArrayCommand.h"
+#include "BuildGridMap/Command/BuildGridMapChangeHeightCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeMapTypeCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeOrientation.h"
+#include "BuildGridMap/Command/BuildGridMapChangeTileEnvTextureCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeTileSizeCommand.h"
 #include "BuildGridMap/Command/BuildGridMapChangeTileTokenCommand.h"
 #include "BuildGridMap/Command/BuildGridMapCommandManager.h"
 #include "BuildGridMap/Command/BuildGridMapDeleteTokenCommand.h"
+#include "BuildGridMap/Command/BuildGridMapDeleteTokenPropertyArrayCommand.h"
 #include "BuildGridMap/UI/BuildGridMapMapConfigWidget.h"
 #include "BuildGridMap/UI/BuildGridMapTileConfigWidget.h"
 #include "BuildGridMap/UI/BuildGridMapWindow.h"
 #include "Components/EditableTextBox.h"
 #include "Components/Button.h"
+#include "Components/SpinBox.h"
 #include "Service/GridPathFindingService.h"
 
 UGridMapModel* ABuildGridMapGameMode::GetGridMapModel() const
@@ -59,7 +65,7 @@ void ABuildGridMapGameMode::BeginPlay()
 	EmptyMapSave.MapConfig.MapSize = FIntPoint(1, 1);
 	EditingMapSave = EmptyMapSave;
 	HasValidMapSave = false;
-
+	
 	// 加载全部的TokenActor类型
 	// 指定Buff蓝图文件夹路径
 #if WITH_EDITOR
@@ -128,6 +134,7 @@ void ABuildGridMapGameMode::BeginPlay()
 	// 格子配置
 	BuildGridMapWindow->TileConfigWidget->OnTileEnvChanged.AddUObject(this, &ABuildGridMapGameMode::OnTileEnvSelectionChanged);
 	BuildGridMapWindow->TileConfigWidget->EnvTextureIndexTextBox->OnTextCommitted.AddDynamic(this, &ABuildGridMapGameMode::OnEnvTextureIndexTextCommitted);
+	BuildGridMapWindow->TileConfigWidget->HeightSpinBox->OnValueCommitted.AddDynamic(this, &ABuildGridMapGameMode::OnHeightSpinBoxValueCommitted);
 	BuildGridMapWindow->TileConfigWidget->AddTokenButton->OnClicked.AddDynamic(this, &ABuildGridMapGameMode::OnAddTokenButtonClick);
 
 	OnSaveStart.AddLambda([this](EBuildGridMapSaveMode InSaveMode)
@@ -679,6 +686,7 @@ void ABuildGridMapGameMode::SwitchEditingMapSave(const FGridMapSave& InMapSave)
 		// 移除当前地图内容
 		EditingTiles.Empty();
 		DirtyChunks.Empty();
+		GridMapModel->RemoveAndDestroyAllTokens();
 	}
 
 	EditingMapSave = InMapSave;
@@ -787,6 +795,9 @@ void ABuildGridMapGameMode::ListenToTokenActorChange(UBuildGridMapTokenActorPane
 	NewActorPanel->OnTokenActorTypeChanged.AddUObject(this, &ABuildGridMapGameMode::OnTokenActorTypeChanged);
 	NewActorPanel->OnTokenFeaturePropertyChanged.AddUObject(this, &ABuildGridMapGameMode::OnTokenFeaturePropertyChanged);
 	NewActorPanel->OnTokenDeleteClicked.AddDynamic(this, &ABuildGridMapGameMode::OnTokenDeleteClicked);
+	NewActorPanel->OnAddTokenPropertyArraySigniture.AddUObject(this,&ABuildGridMapGameMode::OnAddTokenPropertyArrayButtonClick);
+	NewActorPanel->OnTokenDeletePropertyArray.AddDynamic(this,&ABuildGridMapGameMode::OnDeleteTokenPropertyArrayButtonClick);
+	NewActorPanel->OnPropertyArrayValueChanged.AddDynamic(this,&ABuildGridMapGameMode::OnTokenFeaturePropertyArrayChanged);
 }
 
 void ABuildGridMapGameMode::OnMapNameTextCommitted(const FText& Text, ETextCommit::Type CommitMethod)
@@ -980,39 +991,57 @@ void ABuildGridMapGameMode::OnTileEnvSelectionChanged(TObjectPtr<UGridEnvironmen
 
 void ABuildGridMapGameMode::OnEnvTextureIndexTextCommitted(const FText& Text, ETextCommit::Type CommitMethod)
 {
-	// switch (CommitMethod)
-	// {
-	// case ETextCommit::OnEnter:
-	// case ETextCommit::OnUserMovedFocus:
-	// 	{
-	// 		// Todo: 目前只考虑了选中一个格子的情况， 增加多选情况需要调整代码
-	// 		auto SelectedCoord = GetSelectedCoord();
-	//
-	// 		if (!EditingTiles.Contains(SelectedCoord))
-	// 		{
-	// 			UE_LOG(LogGridPathFinding, Error, TEXT("[%s]空地块不支持修改纹理索引"), *SelectedCoord.ToString());
-	// 			return;
-	// 		}
-	//
-	// 		auto ChangeTextureIndexCommand = NewObject<UBuildGridMapChangeTileEnvTextureCommand>(CommandManager);
-	// 		ChangeTextureIndexCommand->Initialize(SelectedCoord,
-	// 		                                      EditingTiles[SelectedCoord].TileEnvData.TextureIndex,
-	// 		                                      FCString::Atoi(*Text.ToString()));
-	// 		CommandManager->ExecuteCommand(ChangeTextureIndexCommand);
-	// 	}
-	// 	break;
-	// default:
-	// 	break;
-	// }
-
 	switch (CommitMethod)
 	{
 	case ETextCommit::OnEnter:
 	case ETextCommit::OnUserMovedFocus:
-		UE_LOG(LogGridPathFinding, Warning, TEXT("TODO: Impl ABuildGridMapGameMode.OnEnvTextureIndexTextCommitted"));
+		{
+			// Todo: 目前只考虑了选中一个格子的情况， 增加多选情况需要调整代码
+			auto SelectedCoord = GetSelectedCoord();
+	
+			if (!EditingTiles.Contains(SelectedCoord))
+			{
+				UE_LOG(LogGridPathFinding, Error, TEXT("[%s]空地块不支持修改纹理索引"), *SelectedCoord.ToString());
+				return;
+			}
+	
+			auto ChangeTextureIndexCommand = NewObject<UBuildGridMapChangeTileEnvTextureCommand>(CommandManager);
+			ChangeTextureIndexCommand->Initialize(SelectedCoord,
+			                                      EditingTiles[SelectedCoord].TileEnvData.TextureIndex,
+			                                      FCString::Atoi(*Text.ToString()));
+			CommandManager->ExecuteCommand(ChangeTextureIndexCommand);
+		}
 		break;
 	default:
 		break;
+	}
+
+	// switch (CommitMethod)
+	// {
+	// case ETextCommit::OnEnter:
+	// case ETextCommit::OnUserMovedFocus:
+	// 	UE_LOG(LogGridPathFinding, Warning, TEXT("TODO: Impl ABuildGridMapGameMode.OnEnvTextureIndexTextCommitted"));
+	// 	break;
+	// default:
+	// 	break;
+	// }
+}
+
+void ABuildGridMapGameMode::OnHeightSpinBoxValueCommitted(float InValue, ETextCommit::Type CommitMethod)
+{
+	switch (CommitMethod)
+	{
+		case ETextCommit::OnEnter:
+		case ETextCommit::OnUserMovedFocus:
+			{
+				auto SelectedCoord = GetSelectedCoord();
+				UBuildGridMapChangeHeightCommand* Command = NewObject<UBuildGridMapChangeHeightCommand>(CommandManager);
+				Command->Initialize(SelectedCoord, InValue);
+				CommandManager->ExecuteCommand(Command);
+			}
+			break;
+		default:
+			break;
 	}
 }
 
@@ -1043,6 +1072,51 @@ void ABuildGridMapGameMode::OnAddTokenButtonClick()
 	auto NewTokenDataIndex = EditingTiles[SelectedCoord].SerializableTokens.Num() - 1;
 	// 创建一个新的TokenActorPanel
 	BuildGridMapWindow->TileConfigWidget->IntervalCreateTokenActorPanel(NewTokenDataIndex, NewTokenData);*/
+}
+
+void ABuildGridMapGameMode::OnAddTokenPropertyArrayButtonClick(const int32 InActorTokenIndex,const int32 InFeatureIndex,const FName& InPropertyArrayName)
+{
+	auto SelectedCoord = GetSelectedCoord();
+	UBuildGridMapAddPropertyArrayCommand* Command = NewObject<UBuildGridMapAddPropertyArrayCommand>(CommandManager);
+	Command->Initialize(SelectedCoord,InActorTokenIndex,InFeatureIndex,InPropertyArrayName);
+	CommandManager->ExecuteCommand(Command);
+}
+
+void ABuildGridMapGameMode::OnDeleteTokenPropertyArrayButtonClick(const int32 InActorTokenIndex,
+	const int32 InFeatureIndex, const FName& InPropertyArrayName, const int32 InArrayIndex)
+{
+	auto SelectedCoord = GetSelectedCoord();
+	UBuildGridMapDeleteTokenPropertyArrayCommand* Command = NewObject<UBuildGridMapDeleteTokenPropertyArrayCommand>(CommandManager);
+	Command->Initialize(SelectedCoord,InActorTokenIndex,InFeatureIndex,InPropertyArrayName,InArrayIndex);
+	CommandManager->ExecuteCommand(Command);
+}
+
+void ABuildGridMapGameMode::OnTokenFeaturePropertyArrayChanged(const int InActorIndex, const int InFeatureIndex,
+	const FName& ArrayName, const int ArrayIndex, const FName& InPropertyName, const FString& NewValue)
+{
+	auto SelectedCoord = GetSelectedCoord();
+	auto TilePtr = EditingTiles.Find(SelectedCoord);
+	if (!TilePtr)
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenFeaturePropertyChanged] Tile not found at %s"), *SelectedCoord.ToString());
+		return;
+	}
+
+	if (!TilePtr->SerializableTokens.IsValidIndex(InActorIndex))
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenFeaturePropertyChanged] Invalid actor index: %d"), InActorIndex);
+		return;
+	}
+
+	if (!TilePtr->SerializableTokens[InActorIndex].Features.IsValidIndex(InFeatureIndex))
+	{
+		UE_LOG(LogGridPathFinding, Error, TEXT("[ABuildGridMapGameMode.OnTokenFeaturePropertyChanged] Invalid feature index: %d"), InFeatureIndex);
+		return;
+	}
+	
+	UBuildGirdMapChangeTokenPropertyArrayCommand* Command = NewObject<UBuildGirdMapChangeTokenPropertyArrayCommand>(CommandManager);
+	Command->Initialize(SelectedCoord,InActorIndex,InFeatureIndex,ArrayName,ArrayIndex,InPropertyName,NewValue);
+	CommandManager->ExecuteCommand(Command);
 }
 
 void ABuildGridMapGameMode::OnTokenDeleteClicked(int32 SerializedTokenIndex)
