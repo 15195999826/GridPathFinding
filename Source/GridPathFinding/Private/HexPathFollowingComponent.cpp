@@ -41,7 +41,8 @@ FAIRequestID UHexPathFollowingComponent::RequestMove(const FAIMoveRequest& Reque
 	auto Ret = Super::RequestMove(RequestData, InPath);
 	auto CurrentPathIndex = GetCurrentPathIndex();
 	auto NextPathIndex = GetNextPathIndex();
-	switch (Status)
+	auto LocalStatus = GetStatus();
+	switch (LocalStatus)
 	{
 		case EPathFollowingStatus::Idle:
 			break;
@@ -177,7 +178,7 @@ void UHexPathFollowingComponent::FollowPathSegment(float DeltaTime)
 	 */
 
 	// Todo: 记录当前线段进度，50%是，认为已经占据了下一个棋格
-	if (Path && Status == EPathFollowingStatus::Moving && IsWaitingForEnterBookedCoord)
+	if (Path && GetStatus() == EPathFollowingStatus::Moving && IsWaitingForEnterBookedCoord)
 	{
 		auto StartPos = Path->GetPathPointLocation(GetCurrentPathIndex()).Position;
 		auto EndPos = Path->GetPathPointLocation(GetNextPathIndex()).Position;

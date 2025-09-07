@@ -56,7 +56,8 @@ protected:
 
 	virtual void RemapHitLocation(FVector& HitLocation, bool IsHitGround, AActor* InHitActor) override;
 
-	virtual void CustomTick(float DeltaSeconds, bool OverWidget, bool IsHitGround, const FVector& HitGroundLocation, AActor* InHitActor, UPrimitiveComponent* InHitComponent) override;
+	virtual void CustomTick(float DeltaSeconds, bool OverWidget, bool IsHitGround, const FVector& HitGroundLocation, AActor* InHitActor, UPrimitiveComponent* InHitComponent, const
+							FVector& InHitResultLocation) override;
 
 public:
 	UFUNCTION(BlueprintCallable)
