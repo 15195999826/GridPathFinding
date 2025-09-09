@@ -40,6 +40,7 @@ FPathFindingResult AGridPathFindingNavMesh::FindPath(const FNavAgentProperties& 
 
 	if (!GraphAStarNavMesh->WeakMapModel.IsValid())
 	{
+		UE_LOG(LogGridPathFinding_NavMesh, Error, TEXT("FindPath: WeakMapModel is not valid!"));
 		return ENavigationQueryResult::Error;
 	}
 	
