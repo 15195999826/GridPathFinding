@@ -53,8 +53,7 @@ void ABuildGridMapPlayerController::RemapHitLocation(FVector& HitLocation, bool 
 
 void ABuildGridMapPlayerController::CustomTick(float DeltaSeconds, bool OverWidget, bool IsHitGround,
                                                const FVector& HitGroundLocation, AActor* InHitActor,
-                                               UPrimitiveComponent* InHitComponent, const
-                                               FVector& InHitResultLocation)
+                                               UPrimitiveComponent* InHitComponent, const FVector& InHitResultLocation)
 {
 	if (CanNotInput)
 	{

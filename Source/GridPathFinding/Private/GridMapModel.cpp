@@ -409,7 +409,7 @@ void UGridMapModel::IntervalDeserializeTokens(const FHCubeCoord& InCoord,
 void UGridMapModel::BlockTileOnce(const FVector& InLocation)
 {
 	auto Coord = StableWorldToCoord(InLocation);
-	UnBlockTileOnce(Coord);
+	BlockTileOnce(Coord);
 }
 
 void UGridMapModel::BlockTileOnce(const FHCubeCoord& InCoord)
@@ -526,6 +526,54 @@ double UGridMapModel::GetTraversalCost(int Identifier, int32 FromIndex, int32 To
 {
 	// 子类重写
 	return 1.f;
+}
+
+int32 UGridMapModel::GetMaxDistanceToBoundary(const FHCubeCoord& InCoord) const
+{
+	// 首先检查坐标是否在地图范围内
+	if (!IsCoordInMapArea(InCoord))
+	{
+		return 0; // 如果坐标不在地图内，返回0
+	}
+
+	int32 MaxDistance = MAX_int32;
+
+	switch (MapConfig.DrawMode)
+	{
+		case EGridMapDrawMode::BaseOnRadius:
+			{
+				// 半径模式：计算从当前位置到圆形边界的实际最大距离
+				// 六边形坐标系中，距离原点的距离公式：max(|q|, |r|, |q+r|)
+				int32 DistanceToCenter = FMath::Max(FMath::Max(FMath::Abs(InCoord.QRS.X), FMath::Abs(InCoord.QRS.Y)), FMath::Abs(InCoord.QRS.X + InCoord.QRS.Y));
+				// 最大距离 = 地图半径 - 当前到圆心距离
+				MaxDistance = FMath::Max(0, MapConfig.MapRadius - DistanceToCenter);
+			}
+			break;
+		
+		case EGridMapDrawMode::BaseOnRowColumn:
+			{
+				// 使用 StableCoordToRowColumn 获取正确的行列坐标
+				FIntPoint RowColumn = StableCoordToRowColumn(InCoord);
+				int32 CurrentRow = RowColumn.X;
+				int32 CurrentCol = RowColumn.Y;
+				
+				// 计算到缓存边界的距离
+				int32 DistToTop = CurrentRow - CachedRowStart;
+				int32 DistToBottom = CachedRowEnd - 1 - CurrentRow;
+				int32 DistToLeft = CurrentCol - CachedColumnStart;
+				int32 DistToRight = CachedColumnEnd - 1 - CurrentCol;
+				
+				// 取最大值作为最大距离
+				MaxDistance = FMath::Max(FMath::Max(DistToTop, DistToBottom), FMath::Max(DistToLeft, DistToRight));
+			}
+			break;
+		
+		default:
+			// 其他模式暂不支持，返回最大值（不限制）
+			break;
+	}
+
+	return MaxDistance;
 }
 
 // 异步任务类的实现
@@ -1468,6 +1516,8 @@ FHTileOrientation UGridMapModel::GetTileOrientation(EGridMapType InMapType, ETil
 TArray<FHCubeCoord> UGridMapModel::GetRangeCoords(const FHCubeCoord& Center, int32 Radius) const
 {
 	TArray<FHCubeCoord> Result;
+
+	// 半径保护
 
 	for (int32 dq = -Radius; dq <= Radius; ++dq)
 	{

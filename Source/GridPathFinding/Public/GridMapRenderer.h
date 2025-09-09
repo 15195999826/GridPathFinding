@@ -37,8 +37,11 @@ struct FGridMapRenderConfig
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="背景Wireframe高亮颜色", EditCondition="bDrawBackgroundWireframe", EditConditionHides))
 	FLinearColor BackgroundWireframeHighlightColor{FLinearColor::Red};
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="背景Wireframe默认绘制偏移", EditCondition="bDrawBackgroundWireframe", EditConditionHides))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="背景默认绘制偏移", EditCondition="bDrawBackgroundWireframe", EditConditionHides))
 	FVector BackgroundDrawLocationOffset = FVector(0.f, 0.f, 0.1f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="背景Wireframe默认绘制偏移", EditCondition="bDrawBackgroundWireframe", EditConditionHides))
+	FVector WireFrameDrawLocationOffset = FVector(0.f, 0.f, 0.5f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(DisplayName="高亮Mask绘制偏移"))
 	FVector HighlightMaskLocationOffset = FVector(0.f, 0.f, 0.3f);

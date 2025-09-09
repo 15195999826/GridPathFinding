@@ -145,6 +145,9 @@ void AGridMapRenderer::RenderTiles()
 		}
 
 		OnRenderOver.Broadcast();
+
+		// 清理委托
+		OnRenderOver.Clear();
 	});
 }
 
@@ -160,12 +163,12 @@ void AGridMapRenderer::HighLightBackground(const FHCubeCoord& InCoord, bool bHig
 	if (bHighLight)
 	{
 		SetWireFrameColor(BackgroundWireframe, InstanceIndex, RenderConfig.BackgroundWireframeHighlightColor,
-						  RenderConfig.BackgroundDrawLocationOffset.Z, 0.2f);
+						  RenderConfig.WireFrameDrawLocationOffset.Z, 0.2f);
 	}
 	else
 	{
 		SetWireFrameColor(BackgroundWireframe, InstanceIndex, RenderConfig.BackgroundWireframeColor,
-						  RenderConfig.BackgroundDrawLocationOffset.Z, 0.f);
+						  RenderConfig.WireFrameDrawLocationOffset.Z, 0.f);
 	}
 }
 
@@ -249,7 +252,7 @@ void AGridMapRenderer::DrawBackgroundWireframe()
 		// UE_LOG(LogTemp, Log, TEXT("[DrawBackgroundWireframe] Row: %d, Col: %d"), Row, Column);
 		auto TileLocation = GridModel->StableCoordToWorld(Coord);
 		FTransform WireFrameTransform = FTransform(
-			GridRotator, TileLocation + RenderConfig.BackgroundDrawLocationOffset,
+			GridRotator, TileLocation + RenderConfig.WireFrameDrawLocationOffset,
 			FVector::OneVector * Scale);
 		auto Index = BackgroundWireframe->AddInstance(WireFrameTransform, true);
 

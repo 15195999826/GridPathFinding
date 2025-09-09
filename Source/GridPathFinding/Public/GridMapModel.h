@@ -204,7 +204,7 @@ public:
 		return false;
 	}
 	
-	const TMap<FHCubeCoord, TWeakObjectPtr<AActor>> GetStandingActorsCopy() const
+	const TMap<FHCubeCoord, TWeakObjectPtr<AActor>>& GetStandingActors() const
 	{
 		return StandingActors;
 	}
@@ -221,6 +221,12 @@ public:
 	virtual bool CanTravelTo(int32 FromIndex, int32 ToIndex);
 
 	int32 GetTileHeight(const FHCubeCoord& InCoord);
+
+	/**
+	 * Height Start From 1
+	 * @param TileIndex 
+	 * @return 
+	 */
 	int32 GetTileHeight(int32 TileIndex);
 	
 	virtual float GetHeightCost(int32 EndTileHeight, int32 StartTileHeight)
@@ -234,6 +240,14 @@ public:
 	}
 
 	virtual double GetTraversalCost(int Identifier, int32 FromIndex, int32 ToIndex);
+
+	/**
+	 * 计算从指定坐标到地图边界的最大距离
+	 * 用于优化AI算法中的范围搜索，避免超出地图边界的无效计算
+	 * @param InCoord 当前坐标
+	 * @return 到地图边界的最大距离
+	 */
+	int32 GetMaxDistanceToBoundary(const FHCubeCoord& InCoord) const;
 
 protected:
 	/** 异步任务类，用于填充 Tiles 数组 */
