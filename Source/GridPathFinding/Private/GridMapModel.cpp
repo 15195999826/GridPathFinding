@@ -576,6 +576,50 @@ int32 UGridMapModel::GetMaxDistanceToBoundary(const FHCubeCoord& InCoord) const
 	return MaxDistance;
 }
 
+float UGridMapModel::GetCoordWorldDistance()
+{
+	FVector2D GridSize = MapConfig.GetGridSize();
+	
+	switch (MapConfig.MapType)
+	{
+		case EGridMapType::HEX_STANDARD:
+		{
+			// 六边形标准地图：通过实际坐标转换计算相邻格子距离
+			FHCubeCoord BaseCoord(0, 0, 0);
+			FHCubeCoord NeighborCoord = BaseCoord + SixDirections.Directions[0];
+			
+			FVector BaseWorldPos = StableCoordToWorld(BaseCoord, true);
+			FVector NeighborWorldPos = StableCoordToWorld(NeighborCoord, true);
+			
+			return FVector::Dist(BaseWorldPos, NeighborWorldPos);
+		}
+			
+		case EGridMapType::RECTANGLE_SIX_DIRECTION:
+			// 六方向矩形：使用矩形的长和宽计算距离
+			if (MapConfig.TileOrientation == ETileOrientationFlag::FLAT)
+			{
+				// 平顶方向：横向距离为宽度，纵向距离为高度的 3/4
+				return FMath::Min(GridSize.X, GridSize.Y * 0.75f);
+			}
+			else
+			{
+				// 尖顶方向：纵向距离为高度，横向距离为宽度的 3/4
+				return FMath::Min(GridSize.Y, GridSize.X * 0.75f);
+			}
+			
+		case EGridMapType::SQUARE_STANDARD:
+			// 正方形标准地图：相邻格子距离就是正方形边长
+			return GridSize.X;
+			
+		case EGridMapType::RECTANGLE_STANDARD:
+			// 矩形标准地图：相邻格子距离为较小的边
+			return FMath::Min(GridSize.X, GridSize.Y);
+	}
+
+	UE_LOG(LogGridPathFinding, Error, TEXT("[GetCoordWorldDistance] 未支持的地图类型: %d"), (int)MapConfig.MapType);
+	return 0.0f;
+}
+
 // 异步任务类的实现
 UGridMapModel::FBuildTilesDataTask::FBuildTilesDataTask(UGridMapModel* InOwner,
                                                         TArray<UGridEnvironmentType*> InEnvironmentTypes,

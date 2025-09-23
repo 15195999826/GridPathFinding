@@ -68,6 +68,16 @@ public:
 		return FString();
 	}
 
+	// ====== 交互 功能 插件中并未调用， 由项目自行决定调用时机 =======
+	UFUNCTION(BlueprintImplementableEvent)
+	void OnFocus();
+
+	UFUNCTION(BlueprintImplementableEvent)
+	void OnLoseFocus();
+
+	UFUNCTION(BlueprintImplementableEvent)
+	void OnTokenClicked();
+
 protected:
 	UPROPERTY()
 	TMap<FName, FString> CustomGameplayData; // 自定义游戏数据

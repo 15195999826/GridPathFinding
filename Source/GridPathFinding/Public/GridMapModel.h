@@ -66,7 +66,6 @@ protected:
 	// 当前坐标上的TokenActor数据
 	// 地图编辑器: 保存数据时要对其进行序列化， 读取数据时， 创建这些Actor
 	// 游戏运行时: 读取数据创建这些Actor; 可以通过游戏中的一些功能, 增加、删除、更改这些Actor
-
 	TMap<int32, TObjectPtr<ATokenActor>> TokenMap;
 	TMap<FHCubeCoord, TArray<int32>> Coord2TokenIDsMap;
 	
@@ -248,6 +247,10 @@ public:
 	 * @return 到地图边界的最大距离
 	 */
 	int32 GetMaxDistanceToBoundary(const FHCubeCoord& InCoord) const;
+
+	// 获取两个相邻格子的世界距离
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	float GetCoordWorldDistance();
 
 protected:
 	/** 异步任务类，用于填充 Tiles 数组 */
