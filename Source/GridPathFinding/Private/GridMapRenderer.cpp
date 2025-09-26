@@ -331,6 +331,12 @@ void AGridMapRenderer::OnTileHeightUpdate(const FHCubeCoord& InCoord, float oldH
 	auto TileEnvTypeISM = GetEnvironmentComponent(TileEnv.EnvironmentType);
 	if (!TileEnvTypeISM)
 	{
+		if (TileEnv.EnvironmentType == UGridEnvironmentType::EmptyEnvTypeID)
+		{
+			// 空环境类型不报错
+			return;
+		}
+		
 		UE_LOG(LogGridPathFinding, Error, TEXT("未找到对应的ISM组件，无法更新高度"));
 		return;
 	}

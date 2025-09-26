@@ -22,7 +22,7 @@ class GRIDPATHFINDING_API USimpleObstacleFeature : public UActorComponent, publi
 
 	virtual void UpdateFeatureProperty(const FSerializableTokenProperty& InNewProperty) override;
 
-	virtual void InitGameplayFeature() override;
+	virtual void InitGameplayFeature(UGridMapModel* MapModel) override;
 
 	virtual void InitBuildGridMapFeature() override;
 

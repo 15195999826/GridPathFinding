@@ -59,6 +59,7 @@ void UGridMapModel::BuildTilesData(const FGridMapConfig& InMapConfig,
 	// 构造寻路缓存数据
 	BuildPathFindingCache();
 
+	// Todo: 这里存在严重的异步问题, 启动游戏时, 有时会导致地图无法加载
 	// 终止上一个可能正在运行的异步任务
 	if (BuildTilesDataTask.IsValid())
 	{
@@ -70,8 +71,10 @@ void UGridMapModel::BuildTilesData(const FGridMapConfig& InMapConfig,
 		// 确保任务被取消
 		if (!BuildTilesDataTask->IsDone())
 		{
+			UE_LOG(LogGridPathFinding, Warning, TEXT("Waiting for previous BuildTilesDataTask to cancel..."));
 			// 异步等待任务完成
 			BuildTilesDataTask->EnsureCompletion();
+			UE_LOG(LogGridPathFinding, Warning, TEXT("Previous BuildTilesDataTask cancelled."));
 		}
 	}
 
@@ -239,7 +242,7 @@ void UGridMapModel::AppendToken(const FHCubeCoord& InCoord, ATokenActor* InToken
 
 	if (CallGameplayInit)
 	{
-		InTokenActor->InitGameplayToken();
+		InTokenActor->InitGameplayToken(this);
 	}
 }
 
@@ -499,7 +502,7 @@ int32 UGridMapModel::GetTileHeight(int32 TileIndex)
 	}
 
 	UE_LOG(LogGridPathFinding, Error, TEXT("[GetTileHeight] Invalid tile index: %d"), TileIndex);
-	return INT32_MAX;
+	return 0;
 }
 
 bool UGridMapModel::CanTravelTo(int32 FromIndex, int32 ToIndex)

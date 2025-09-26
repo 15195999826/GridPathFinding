@@ -22,15 +22,8 @@ void USimpleObstacleFeature::UpdateFeatureProperty(const FSerializableTokenPrope
 {
 }
 
-void USimpleObstacleFeature::InitGameplayFeature()
+void USimpleObstacleFeature::InitGameplayFeature(UGridMapModel* MapModel)
 {
-	auto MapModel = UGridPathFindingService::Get()->GetGridMapModel();
-	
-	if (!MapModel)
-	{
-		return;
-	}
-
 	MapModel->BlockTileOnce(GetOwner()->GetActorLocation());
 }
 

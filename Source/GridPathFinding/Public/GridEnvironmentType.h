@@ -51,7 +51,7 @@ struct FGridEnvironmentMaterialCustomData
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, DisplayName="Roughness")
 	float Roughness = 1.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, DisplayName="Roughness")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, DisplayName="NormalIntensity")
 	float NormalIntensity = 1.f;
 };
 

@@ -7,6 +7,7 @@
 #include "UObject/Interface.h"
 #include "TokenFeatureInterface.generated.h"
 
+class UGridMapModel;
 // This class does not need to be modified.
 UINTERFACE()
 class UTokenFeatureInterface : public UInterface
@@ -42,5 +43,5 @@ public:
 
 	virtual TArray<FSerializableTokenProperty> CreatePropertyArray(const FName& PropertyArrayName) = 0;
 	
-	virtual void InitGameplayFeature() = 0;
+	virtual void InitGameplayFeature(UGridMapModel* MapModel) = 0;
 };

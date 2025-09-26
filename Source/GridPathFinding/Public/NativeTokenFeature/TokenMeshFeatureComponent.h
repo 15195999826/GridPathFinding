@@ -46,7 +46,7 @@ public:
 
 	virtual void UpdateFeatureProperty(const FSerializableTokenProperty& InNewProperty) override;
 
-	virtual void InitGameplayFeature() override{};
+	virtual void InitGameplayFeature(UGridMapModel* MapModel) override{};
 
 	virtual TArray<FSerializableTokenProperty> CreatePropertyArray(const FName& PropertyArrayName) override;
 	

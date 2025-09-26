@@ -8,6 +8,7 @@
 #include "Types/TokenActorData.h"
 #include "TokenActor.generated.h"
 
+class UGridMapModel;
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnTokenActorRemoveFromMapDelegate, ATokenActor* /*TokenActor*/);
 
 UCLASS()
@@ -40,7 +41,7 @@ public:
 	/**
 	 * 游戏运行时， 初始化Token功能, 需要自行在游戏玩法流程中调用
 	 */
-	void InitGameplayToken() const;
+	void InitGameplayToken(UGridMapModel* MapModel) const;
 
 	FOnTokenActorRemoveFromMapDelegate OnRemoveFromMap;
 

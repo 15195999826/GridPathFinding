@@ -43,14 +43,14 @@ void ATokenActor::BeginPlay()
 	MeshComponent->SetVisibility(false);
 }
 
-void ATokenActor::InitGameplayToken() const
+void ATokenActor::InitGameplayToken(UGridMapModel* MapModel) const
 {
 	auto TokenFeatures = GetComponentsByInterface(UTokenFeatureInterface::StaticClass());
 
 	for (UActorComponent* Component : TokenFeatures)
 	{
 		auto FeatureInterface = Cast<ITokenFeatureInterface>(Component);
-		FeatureInterface->InitGameplayFeature();
+		FeatureInterface->InitGameplayFeature(MapModel);
 	}
 }
 
