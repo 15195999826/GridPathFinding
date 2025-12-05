@@ -202,6 +202,16 @@ public:
 		OutActor = nullptr;
 		return false;
 	}
+
+	bool IsContainStandingActor(AActor* InActor)
+	{
+		return StandingActors.Contains(StableWorldToCoord(InActor->GetActorLocation()));
+	}
+
+	bool IsContainStandingActor(const FVector& InActorLocation)
+	{
+		return StandingActors.Contains(StableWorldToCoord(InActorLocation));
+	}
 	
 	const TMap<FHCubeCoord, TWeakObjectPtr<AActor>>& GetStandingActors() const
 	{
