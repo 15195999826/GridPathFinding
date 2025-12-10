@@ -101,6 +101,11 @@ public:
 	 * 允许在再次调用此函数时，终止上次的异步任务，清理数据后启动新的异步任务
 	 */
 	virtual void BuildTilesData(const FGridMapConfig& InMapConfig, const TMap<FHCubeCoord, FSerializableTile>& InTilesData);
+
+	void SetMapConfig(const FGridMapConfig& InMapConfig)
+	{
+		MapConfig = InMapConfig;
+	}
 	
 	void UpdateTileEnv(const FSerializableTile& InTileData, bool bNotify = true);
 	void UpdateTileHeight(const FHCubeCoord& InCoord, float NewHeight, bool bNotify = true);

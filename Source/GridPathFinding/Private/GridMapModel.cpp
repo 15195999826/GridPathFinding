@@ -999,12 +999,28 @@ const FHCubeCoord UGridMapModel::GetBackwardCoord(const FHCubeCoord& InLocalCoor
 		InNextCoord.QRS.Z - InLocalCoord.QRS.Z
 	);
 
-	// 将这个方向应用到 InNextCoord，得到背后一格的位置
-	return FHCubeCoord(
-		InNextCoord.QRS.X + Direction.QRS.X,
-		InNextCoord.QRS.Y + Direction.QRS.Y,
-		InNextCoord.QRS.Z + Direction.QRS.Z
-	);
+	// 归一化到最近的标准六方向（六个标准方向之一才是"1格"）
+	int32 BestDirectionIndex = 0;
+	float BestDotProduct = -FLT_MAX;
+
+	for (int32 i = 0; i < SixDirections.Directions.Num(); ++i)
+	{
+		const FHCubeCoord& StdDir = SixDirections.Directions[i];
+		// 计算点积（相似度）
+		float DotProduct = Direction.QRS.X * StdDir.QRS.X +
+		                   Direction.QRS.Y * StdDir.QRS.Y +
+		                   Direction.QRS.Z * StdDir.QRS.Z;
+
+		if (DotProduct > BestDotProduct)
+		{
+			BestDotProduct = DotProduct;
+			BestDirectionIndex = i;
+		}
+	}
+
+	// 使用归一化后的标准方向计算背后一格的位置
+	const FHCubeCoord& NormalizedDirection = SixDirections.Directions[BestDirectionIndex];
+	return InNextCoord + NormalizedDirection;
 }
 
 TArray<FHCubeCoord> UGridMapModel::GetCoordsBetween(const FHCubeCoord& StartCoord, const FHCubeCoord& EndCoord)
